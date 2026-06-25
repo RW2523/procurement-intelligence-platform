@@ -87,9 +87,11 @@ export const maConnector: Connector = {
     const total = totalCount(seed.text);
     let methodUsed = "static_html (httpx page 1)";
 
-    // Deeper coverage via Playwright when not doing a quick smoke run.
-    const maxPages = opts.limit ? 1 : 4;
-    if (!opts.limit && maxPages > 1) {
+    // Deeper coverage via Playwright when enabled (off on serverless — falls back
+    // to the reliable httpx page 1). Set PLAYWRIGHT_ENABLED=true where a browser exists.
+    const playwrightEnabled = process.env.PLAYWRIGHT_ENABLED === "true";
+    const maxPages = opts.limit || !playwrightEnabled ? 1 : 4;
+    if (playwrightEnabled && !opts.limit && maxPages > 1) {
       try {
         const deep = await deepPaginate(maxPages, opts.signal);
         if (deep.length >= opportunities.length) {
