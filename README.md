@@ -13,6 +13,23 @@ Three engines:
 
 ---
 
+## 🚀 Live deployment (entirely in the cloud)
+
+- **App:** https://pocu-wheat.vercel.app — gated by Basic Auth (any username, password `ajace-demo`)
+- **Vercel** runs the Next.js app, API routes, and the serverless crawlers; **Vercel Cron** hits
+  `/api/cron` daily at 10:00 UTC (~6 AM ET, protected by `CRON_SECRET`).
+- **Supabase** (cloud) holds the Postgres + `pgvector` data; **OpenRouter** serves the LLM.
+- Nothing runs locally — the whole pipeline (discover → dedupe → draft → review → track) lives in the cloud.
+
+> Demo posture: the public URL is protected only by a shared password, and the database currently uses
+> the `anon` key with permissive RLS. For real production, set `SUPABASE_SERVICE_ROLE_KEY` to the
+> service_role secret, drop the `demo_all` RLS policies, and add per-user auth.
+
+Redeploy with `vercel --prod`. On serverless, MA uses its reliable httpx page (Playwright stays off
+unless `PLAYWRIGHT_ENABLED=true`).
+
+---
+
 ## Stack
 
 | Layer | Choice |
