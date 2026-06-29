@@ -19,27 +19,45 @@ export async function POST(req: NextRequest) {
   const recs = Array.isArray(body.recommendations) ? (body.recommendations as string[]) : ["BID"];
   const sb = getServiceClient();
 
+  // Portals whose documents are discoverable from the detail-page HTML. (NC keeps
+  // documents behind a Dataverse subgrid, so NC opps are only processed when their
+  // attachments were already discovered — otherwise the loop would never converge.)
+  const DISCOVERABLE = new Set(["tn", "ma", "pa", "ar"]);
+
   // Strong-fit opportunities that have a detail page to discover documents from.
   const { data: candidates } = await sb
     .from("opportunities")
-    .select("id")
+    .select("id, source:sources(slug)")
     .in("bid_recommendation", recs)
     .not("detail_url", "is", null)
     .order("relevance_score", { ascending: false })
-    .limit(500);
-  const candidateIds = (candidates ?? []).map((c) => c.id);
-  if (!candidateIds.length) {
-    return NextResponse.json({ processed: 0, stored: 0, remaining: 0, done: true });
+    .limit(800);
+  const rows = (candidates ?? []).map((c) => ({
+    id: c.id as string,
+    slug: ((c as { source?: { slug?: string } }).source?.slug ?? "") as string,
+  }));
+  if (!rows.length) return NextResponse.json({ processed: 0, stored: 0, remaining: 0, done: true });
+  const candidateIds = rows.map((r) => r.id);
+
+  // Attachment state for the candidates: which are downloaded, which have any rows.
+  const { data: attRows } = await sb
+    .from("attachments")
+    .select("opportunity_id, downloaded_at")
+    .in("opportunity_id", candidateIds);
+  const done = new Set<string>();
+  const hasAttachment = new Set<string>();
+  for (const a of attRows ?? []) {
+    hasAttachment.add(a.opportunity_id);
+    if (a.downloaded_at) done.add(a.opportunity_id);
   }
 
-  // Which of those already have a downloaded document → skip them.
-  const { data: doneRows } = await sb
-    .from("attachments")
-    .select("opportunity_id")
-    .in("opportunity_id", candidateIds)
-    .not("downloaded_at", "is", null);
-  const done = new Set((doneRows ?? []).map((r) => r.opportunity_id));
-  const todo = candidateIds.filter((id) => !done.has(id));
+  // Eligible = not yet downloaded AND (already has discovered attachments OR portal is
+  // HTML-discoverable). Process opps that already have attachments first (guaranteed yield).
+  const eligible = rows.filter(
+    (r) => !done.has(r.id) && (hasAttachment.has(r.id) || DISCOVERABLE.has(r.slug)),
+  );
+  eligible.sort((a, b) => Number(hasAttachment.has(b.id)) - Number(hasAttachment.has(a.id)));
+  const todo = eligible.map((r) => r.id);
 
   const slice = todo.slice(0, batch);
   let stored = 0;
