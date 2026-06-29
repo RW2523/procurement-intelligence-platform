@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Paperclip, FileText } from "lucide-react";
 import type { OpportunityView } from "@/lib/types";
-import { OPP_STATUS_STYLES } from "@/lib/status";
+import { OPP_STATUS_STYLES, BID_REC_STYLES } from "@/lib/status";
 import { Badge, RelevanceBar } from "@/components/ui";
 import { fmtDate, daysUntil, deadlineLabel } from "@/lib/utils";
 
@@ -15,6 +15,7 @@ export function OpportunityTable({ opps, dense = false }: { opps: OpportunityVie
             {!dense && <th className="py-2.5 px-3 font-semibold">Source</th>}
             <th className="py-2.5 px-3 font-semibold">Status</th>
             <th className="py-2.5 px-3 font-semibold w-[130px]">Relevance</th>
+            <th className="py-2.5 px-3 font-semibold">AI bid</th>
             <th className="py-2.5 px-3 font-semibold">Due</th>
           </tr>
         </thead>
@@ -57,6 +58,18 @@ export function OpportunityTable({ opps, dense = false }: { opps: OpportunityVie
                 </td>
                 <td className="py-3 px-3">
                   <RelevanceBar score={o.relevance_score} />
+                </td>
+                <td className="py-3 px-3">
+                  {o.bid_recommendation ? (
+                    <Badge
+                      label={BID_REC_STYLES[o.bid_recommendation].label}
+                      bg={BID_REC_STYLES[o.bid_recommendation].bg}
+                      fg={BID_REC_STYLES[o.bid_recommendation].fg}
+                      dot={BID_REC_STYLES[o.bid_recommendation].dot}
+                    />
+                  ) : (
+                    <span className="text-[0.72rem] text-[var(--color-faint)]">—</span>
+                  )}
                 </td>
                 <td className="py-3 px-3 whitespace-nowrap">
                   <div className="text-[var(--color-ink-2)]">{fmtDate(o.due_date)}</div>

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "crawl": "node scripts/trigger-crawl.mjs",
+    "rescore": "node scripts/rescore.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

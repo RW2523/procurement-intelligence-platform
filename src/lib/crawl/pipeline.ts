@@ -1,7 +1,7 @@
 import { getServiceClient } from "@/lib/supabase/server";
 import { getConnector } from "@/lib/connectors/registry";
-import { getRelevanceSettings } from "@/lib/db/settings";
-import { scoreRelevance } from "@/lib/ai/relevance";
+import { getRelevanceSettings, getCompanySettings } from "@/lib/db/settings";
+import { scoreRelevance, classifyRelevanceLLM, buildCompanyProfile } from "@/lib/ai/relevance";
 import { contentHash, fallbackExternalId } from "./hash";
 import { fmtDate } from "@/lib/utils";
 import type { NormalizedOpportunity, Source } from "@/lib/types";
@@ -39,6 +39,7 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
   const sb = getServiceClient();
   const startedAt = Date.now();
   const warnings: string[] = [];
+  const notes: string[] = [];
   let methodUsed = "";
   let itemsFound = 0;
   let newCount = 0;
@@ -71,6 +72,8 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
       .eq("source_id", source.id);
     const existing = new Map((existingRows ?? []).map((r) => [r.external_id, r]));
     const seen = new Set<string>();
+    // New / amended items to send through the LLM bid-no-bid check after the loop.
+    const toScore: { id: string; o: NormalizedOpportunity }[] = [];
 
     for (const o of result.opportunities) {
       const externalId = o.externalId?.trim() || fallbackExternalId(o);
@@ -107,6 +110,7 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
         }
         const oppId = inserted.id;
         newCount++;
+        toScore.push({ id: oppId, o });
         await sb.from("opportunity_versions").insert({
           opportunity_id: oppId,
           version_no: 1,
@@ -151,6 +155,7 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
           .update({ ...fields, status: newStatus, last_seen_at: nowISO() })
           .eq("id", ex.id);
         changedCount++;
+        toScore.push({ id: ex.id, o });
         const { data: vmax } = await sb
           .from("opportunity_versions")
           .select("version_no")
@@ -209,6 +214,46 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
       closedCount++;
     }
 
+    // ── LLM bid/no-bid check: refine new & amended items vs the company profile ──
+    if (toScore.length) {
+      try {
+        const [company] = await Promise.all([getCompanySettings()]);
+        const profile = buildCompanyProfile(company, rel);
+        const capped = toScore.slice(0, 80); // bound per-run cost/time on serverless
+        const verdicts = await classifyRelevanceLLM(
+          capped.map(({ id, o }) => ({
+            id,
+            title: o.title,
+            agency: o.agency,
+            category: o.category,
+            description: o.description,
+            naicsCode: o.naicsCode,
+          })),
+          profile,
+        );
+        let llmScored = 0;
+        for (const { id } of capped) {
+          const v = verdicts.get(id);
+          if (!v) continue;
+          await sb
+            .from("opportunities")
+            .update({
+              relevance_score: v.score,
+              relevance_reason: v.reason,
+              bid_recommendation: v.recommendation,
+              relevance_method: "llm",
+            })
+            .eq("id", id);
+          llmScored++;
+        }
+        if (llmScored) notes.push(`LLM bid/no-bid scored ${llmScored} new/amended item(s)`);
+        if (toScore.length > capped.length)
+          notes.push(`LLM scored ${capped.length}/${toScore.length}; remainder kept keyword score`);
+      } catch (e) {
+        warnings.push(`LLM relevance check skipped: ${(e as Error).message}`);
+      }
+    }
+
     const durationMs = Date.now() - startedAt;
     const status = warnings.length ? "partial" : "success";
     await sb
@@ -231,7 +276,7 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
         closed_count: closedCount,
         error_count: 0,
         duration_ms: durationMs,
-        log: warnings.join("\n"),
+        log: [...notes, ...warnings].join("\n"),
       })
       .eq("id", runId!);
 

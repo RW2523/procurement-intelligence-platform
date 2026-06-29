@@ -26,7 +26,7 @@ import { Card, CardHeader, Badge, RelevanceBar } from "@/components/ui";
 import { StatusControls } from "@/components/opportunities/StatusControls";
 import { ResponseWorkspace, type ResponseWithRevisions } from "@/components/responses/ResponseWorkspace";
 import { SetupNotice } from "@/components/SetupNotice";
-import { OPP_STATUS_STYLES, PIPELINE_STYLES, relevanceStyle } from "@/lib/status";
+import { OPP_STATUS_STYLES, PIPELINE_STYLES, relevanceStyle, BID_REC_STYLES } from "@/lib/status";
 import { fmtDate, fmtDateTime, deadlineLabel, fmtCurrency, daysUntil } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -96,7 +96,17 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
             </div>
             {opp.relevance_reason && (
               <div className="px-5 pb-4">
-                <div className="text-[0.72rem] uppercase tracking-wide text-[var(--color-faint)] mb-1">Relevance assessment</div>
+                <div className="text-[0.72rem] uppercase tracking-wide text-[var(--color-faint)] mb-1 flex items-center gap-2">
+                  {opp.relevance_method === "llm" ? "AI bid / no-bid assessment" : "Relevance assessment"}
+                  {opp.bid_recommendation && (
+                    <Badge
+                      label={BID_REC_STYLES[opp.bid_recommendation].label}
+                      bg={BID_REC_STYLES[opp.bid_recommendation].bg}
+                      fg={BID_REC_STYLES[opp.bid_recommendation].fg}
+                      dot={BID_REC_STYLES[opp.bid_recommendation].dot}
+                    />
+                  )}
+                </div>
                 <div className="flex items-center gap-3">
                   <RelevanceBar score={opp.relevance_score} />
                   <span className="text-[0.82rem] text-[var(--color-muted)]">{opp.relevance_reason}</span>

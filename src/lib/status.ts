@@ -4,6 +4,7 @@ import type {
   ResponseStatus,
   SourceStatus,
   NotificationType,
+  BidRecommendation,
 } from "@/lib/types";
 
 interface Style {
@@ -59,6 +60,12 @@ export const NOTIF_STYLES: Record<NotificationType, { label: string; emoji: stri
   CRAWL_FAILURE: { label: "Crawl failure", emoji: "🚨" },
   RESPONSE_APPROVED: { label: "Response approved", emoji: "✅" },
   STATUS_CHANGE: { label: "Status change", emoji: "🔄" },
+};
+
+export const BID_REC_STYLES: Record<BidRecommendation, Style> = {
+  BID: { label: "Bid", bg: "var(--color-mint-100)", fg: "var(--color-mint-700)", dot: "var(--color-mint-500)" },
+  REVIEW: { label: "Review", bg: "var(--color-amber-100)", fg: "var(--color-amber-700)", dot: "var(--color-amber-500)" },
+  NO_BID: { label: "No-bid", bg: "#eef0f4", fg: "#5b6170", dot: "#9aa1ad" },
 };
 
 export function relevanceStyle(score: number | null | undefined): Style {

@@ -51,6 +51,9 @@ export type NotificationType =
 
 export type KnowledgeOutcome = "won" | "lost" | "unknown";
 
+/** LLM bid/no-bid verdict for a solicitation against the company profile. */
+export type BidRecommendation = "BID" | "REVIEW" | "NO_BID";
+
 export const PIPELINE_STAGES: PipelineStage[] = [
   "BACKLOG",
   "REVIEWING",
@@ -125,6 +128,10 @@ export interface Opportunity {
   pipeline_stage: PipelineStage;
   relevance_score: number | null;
   relevance_reason: string | null;
+  /** LLM bid/no-bid verdict tuned to the company profile. */
+  bid_recommendation: BidRecommendation | null;
+  /** Which scorer produced the current relevance fields: 'keyword' | 'llm'. */
+  relevance_method: string;
   content_hash: string;
   assigned_to: string | null;
   first_seen_at: string;
@@ -323,4 +330,6 @@ export interface CompanySettings {
   name: string;
   tagline: string;
   about: string;
+  industry?: string;
+  capabilities?: string[];
 }
