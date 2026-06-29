@@ -46,7 +46,22 @@ export function DocumentsPanel({
   const [attachments, setAttachments] = useState<Attachment[]>(initial);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<"pdf" | "text">("pdf");
+  const [textById, setTextById] = useState<Record<string, string>>({});
+  const [loadingText, setLoadingText] = useState(false);
   const ranAuto = useRef(false);
+
+  async function loadText(id: string) {
+    if (textById[id] !== undefined) return;
+    setLoadingText(true);
+    try {
+      const res = await fetch(`/api/attachments/${id}/text`);
+      const data = await res.json();
+      setTextById((m) => ({ ...m, [id]: data.text ?? "" }));
+    } finally {
+      setLoadingText(false);
+    }
+  }
 
   const hasPending = attachments.some((a) => a.source_url && !a.downloaded_at);
   const downloaded = attachments.filter((a) => a.downloaded_at && a.parse_status !== "failed");
@@ -163,8 +178,29 @@ export function DocumentsPanel({
 
       {selectedDoc && isPreviewable(selectedDoc) && (
         <div className="px-5 pb-5 pt-1">
-          <div className="text-[0.72rem] uppercase tracking-wide text-[var(--color-faint)] mb-2">
-            Preview · {selectedDoc.filename}
+          <div className="flex items-center justify-between mb-2 gap-3">
+            <div className="text-[0.72rem] uppercase tracking-wide text-[var(--color-faint)] truncate">
+              Preview · {selectedDoc.filename}
+            </div>
+            {selectedDoc.parse_status === "parsed" && (
+              <div className="flex gap-1 shrink-0">
+                <button
+                  className={`btn btn-sm ${previewMode === "pdf" ? "btn-soft" : "btn-ghost"}`}
+                  onClick={() => setPreviewMode("pdf")}
+                >
+                  PDF
+                </button>
+                <button
+                  className={`btn btn-sm ${previewMode === "text" ? "btn-soft" : "btn-ghost"}`}
+                  onClick={() => {
+                    setPreviewMode("text");
+                    void loadText(selectedDoc.id);
+                  }}
+                >
+                  Text
+                </button>
+              </div>
+            )}
           </div>
           {(selectedDoc.content_type ?? "").startsWith("image/") ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -173,11 +209,19 @@ export function DocumentsPanel({
               alt={selectedDoc.filename}
               className="max-w-full rounded-lg border border-[var(--color-border)]"
             />
+          ) : previewMode === "text" && selectedDoc.parse_status === "parsed" ? (
+            <pre className="max-h-[620px] overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4 text-[0.78rem] leading-relaxed whitespace-pre-wrap text-[var(--color-ink-2)]">
+              {textById[selectedDoc.id] === undefined
+                ? loadingText
+                  ? "Loading extracted text…"
+                  : "Click Text to load."
+                : textById[selectedDoc.id] || "No text extracted."}
+            </pre>
           ) : (
             <iframe
               src={`/api/attachments/${selectedDoc.id}/file`}
               title={selectedDoc.filename}
-              className="w-full rounded-lg border border-[var(--color-border)]"
+              className="w-full rounded-lg border border-[var(--color-border)] bg-white"
               style={{ height: 620 }}
             />
           )}
