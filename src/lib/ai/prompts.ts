@@ -27,7 +27,10 @@ function ctxBlock(ctx: OppContext): string {
     "",
     "Description / scope:",
     ctx.description ?? "(no description captured)",
-    ctx.attachmentsText ? `\nRequirements excerpted from attachments:\n${ctx.attachmentsText}` : "",
+    ctx.attachmentsText
+      ? `\n=== SOLICITATION DOCUMENTS (full text extracted from the RFP/specs — this is the ` +
+        `authoritative knowledge base; ground the response in these requirements) ===\n${ctx.attachmentsText}`
+      : "\n(No solicitation documents were available to extract — work from the scope above.)",
   ].join("\n");
 }
 
@@ -47,7 +50,9 @@ export function buildStyleMatchedPrompt(ctx: OppContext, retrieved: RetrievedChu
     `Draft a response to the following solicitation in ${company.name}'s established style.\n\n` +
     `${ctxBlock(ctx)}\n\n=== HOW WE WRITE (past proposal excerpts) ===\n${examples}\n\n` +
     `Produce a complete, submission-ready draft: executive summary, understanding of requirements, ` +
-    `proposed approach, relevant experience, team, and why ${company.name}. Keep it specific to this solicitation.`;
+    `proposed approach, relevant experience, team, and why ${company.name}. Keep it specific to this solicitation. ` +
+    `Ground every section in the SOLICITATION DOCUMENTS above — reference their specific requirements, scope items, ` +
+    `evaluation criteria, and deliverables; do not invent requirements that are not in the documents.`;
   return { system, user };
 }
 
@@ -62,7 +67,9 @@ export function buildOriginalPrompt(ctx: OppContext, company: CompanySettings) {
     `${ctxBlock(ctx)}\n\n` +
     `Include: a compelling executive summary, a compliance-mapped understanding of requirements, ` +
     `a differentiated technical approach, a realistic implementation plan with milestones, risk ` +
-    `mitigation, relevant qualifications, and a clear value proposition. Be concrete and persuasive.`;
+    `mitigation, relevant qualifications, and a clear value proposition. Be concrete and persuasive. ` +
+    `Base the response on the SOLICITATION DOCUMENTS above — map your approach to their actual requirements, ` +
+    `scope of work, and evaluation criteria; cite specifics from the documents rather than generic claims.`;
   return { system, user };
 }
 

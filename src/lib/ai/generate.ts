@@ -2,6 +2,7 @@ import { getServiceClient } from "@/lib/supabase/server";
 import { getCompanySettings } from "@/lib/db/settings";
 import { config } from "@/lib/config";
 import { retrieveSimilar } from "./rag";
+import { fetchOpportunityDocuments } from "@/lib/crawl/attachments";
 import { llmGenerate } from "./llm";
 import {
   buildStyleMatchedPrompt,
@@ -28,10 +29,10 @@ async function loadContext(opportunityId: string): Promise<{ ctx: OppContext; op
     .eq("opportunity_id", opportunityId);
   const attachmentsText =
     (atts ?? [])
-      .map((a) => a.parsed_text)
-      .filter(Boolean)
+      .filter((a) => a.parsed_text && a.parsed_text.trim().length > 0)
+      .map((a) => `--- DOCUMENT: ${a.filename} ---\n${a.parsed_text}`)
       .join("\n\n")
-      .slice(0, 6000) || null;
+      .slice(0, 28000) || null; // generous knowledge-base budget from the real RFP text
   const source = (opp as { source?: { name?: string; state?: string } }).source;
   const ctx: OppContext = {
     externalId: opp.external_id as string,
@@ -48,6 +49,27 @@ async function loadContext(opportunityId: string): Promise<{ ctx: OppContext; op
   return { ctx, opp };
 }
 
+/**
+ * Ensure the solicitation documents are downloaded + text-extracted before drafting,
+ * so the AI writes from the real RFP requirements rather than the listing blurb.
+ * No-op when document text is already on file.
+ */
+async function ensureDocuments(opportunityId: string): Promise<void> {
+  const sb = getServiceClient();
+  const { data: atts } = await sb
+    .from("attachments")
+    .select("parsed_text")
+    .eq("opportunity_id", opportunityId);
+  const hasText = (atts ?? []).some((a) => (a.parsed_text?.trim().length ?? 0) > 100);
+  if (hasText) return;
+  try {
+    // discover (parse the portal detail page) → download → extract text
+    await fetchOpportunityDocuments(opportunityId, { max: 6, discover: true });
+  } catch {
+    /* generation still proceeds if documents are unavailable */
+  }
+}
+
 /** Generate a Mode 1 (STYLE_MATCHED) or Mode 2 (LLM_ORIGINAL) draft and persist it. */
 export async function generateResponseDraft(
   opportunityId: string,
@@ -56,6 +78,7 @@ export async function generateResponseDraft(
 ): Promise<ResponseDraft> {
   const sb = getServiceClient();
   const company = await getCompanySettings();
+  await ensureDocuments(opportunityId); // read the documents first → knowledge base
   const { ctx } = await loadContext(opportunityId);
 
   let prompt: { system: string; user: string };

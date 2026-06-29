@@ -251,24 +251,20 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
         if (toScore.length > capped.length)
           notes.push(`LLM scored ${capped.length}/${toScore.length}; remainder kept keyword score`);
 
-        // ── Download documents for the most relevant new/amended items (bounded) ──
-        const relevantIds = capped
-          .filter(({ id }) => {
-            const v = verdicts.get(id);
-            return v && (v.recommendation === "BID" || v.recommendation === "REVIEW");
-          })
-          .map((x) => x.id)
-          .slice(0, 4);
+        // ── Download documents for the strong-fit new/amended items (BID first) ──
+        const byRec = (rec: string) =>
+          capped.filter(({ id }) => verdicts.get(id)?.recommendation === rec).map((x) => x.id);
+        const relevantIds = [...byRec("BID"), ...byRec("REVIEW")].slice(0, 12);
         let docs = 0;
         for (const id of relevantIds) {
           try {
-            const r = await fetchOpportunityDocuments(id, { max: 2 });
+            const r = await fetchOpportunityDocuments(id, { max: 4 });
             docs += r.stored;
           } catch {
             /* never let a document fetch fail the crawl */
           }
         }
-        if (docs) notes.push(`Downloaded ${docs} document(s) for relevant items`);
+        if (docs) notes.push(`Downloaded ${docs} document(s) for strong-fit items`);
       } catch (e) {
         warnings.push(`LLM relevance check skipped: ${(e as Error).message}`);
       }
