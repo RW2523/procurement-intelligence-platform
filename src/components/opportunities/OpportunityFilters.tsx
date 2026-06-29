@@ -60,8 +60,8 @@ export function OpportunityFilters() {
         <input
           type="checkbox"
           className="accent-[var(--color-brand-600)]"
-          checked={sp.get("relevant") === "1"}
-          onChange={(e) => update("relevant", e.target.checked ? "1" : "")}
+          checked={sp.get("relevant") !== "0"}
+          onChange={(e) => update("relevant", e.target.checked ? "" : "0")}
         />
         Strong fit only
       </label>

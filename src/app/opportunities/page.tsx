@@ -30,7 +30,8 @@ export default async function OpportunitiesPage({
     state: str(sp.state),
     status: str(sp.status),
     sort: (str(sp.sort) as OppFilters["sort"]) ?? "newest",
-    relevanceMin: str(sp.relevant) === "1" ? 70 : undefined,
+    // "Strong fit only" is ON by default — show all only when explicitly turned off (?relevant=0).
+    relevanceMin: str(sp.relevant) === "0" ? undefined : 70,
     limit: 400,
   };
   const opps = await listOpportunities(filters);
