@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
     .select("id, source:sources(slug)")
     .in("bid_recommendation", recs)
     .not("detail_url", "is", null)
+    .is("documents_checked_at", null) // skip opps already attempted (converges the loop)
     .order("relevance_score", { ascending: false })
     .limit(800);
   const rows = (candidates ?? []).map((c) => ({
