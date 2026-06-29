@@ -73,14 +73,19 @@ export async function getOpportunity(id: string): Promise<OpportunityView | null
   return data ? shape(data as unknown as Record<string, unknown>) : null;
 }
 
+// Never select file_base64 here — the bytes are streamed only via /api/attachments/:id/file.
+const ATTACHMENT_COLS =
+  "id, opportunity_id, filename, source_url, storage_url, file_type, content_type, " +
+  "byte_size, parse_status, fetch_error, downloaded_at, created_at";
+
 export async function getAttachments(opportunityId: string): Promise<Attachment[]> {
   const sb = getServiceClient();
   const { data } = await sb
     .from("attachments")
-    .select("*")
+    .select(ATTACHMENT_COLS)
     .eq("opportunity_id", opportunityId)
     .order("created_at");
-  return (data ?? []) as Attachment[];
+  return (data ?? []) as unknown as Attachment[];
 }
 
 export async function getVersions(opportunityId: string): Promise<OpportunityVersion[]> {

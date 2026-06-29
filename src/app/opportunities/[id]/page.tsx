@@ -9,7 +9,6 @@ import {
   Tag,
   Clock,
   History,
-  Paperclip,
   ScrollText,
   FileText,
 } from "lucide-react";
@@ -24,6 +23,7 @@ import { getResponsesForOpp, getRevisions } from "@/lib/db/responses";
 import { listUsers } from "@/lib/db/users";
 import { Card, CardHeader, Badge, RelevanceBar } from "@/components/ui";
 import { StatusControls } from "@/components/opportunities/StatusControls";
+import { DocumentsPanel } from "@/components/opportunities/DocumentsPanel";
 import { ResponseWorkspace, type ResponseWithRevisions } from "@/components/responses/ResponseWorkspace";
 import { SetupNotice } from "@/components/SetupNotice";
 import { OPP_STATUS_STYLES, PIPELINE_STYLES, relevanceStyle, BID_REC_STYLES } from "@/lib/status";
@@ -126,27 +126,7 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
             </div>
           </Card>
 
-          {attachments.length > 0 && (
-            <Card>
-              <CardHeader title="Attachments" subtitle={`${attachments.length} document${attachments.length === 1 ? "" : "s"} — the RFP requirements live here`} />
-              <div className="divide-y divide-[var(--color-border)]">
-                {attachments.map((a) => (
-                  <a
-                    key={a.id}
-                    href={a.source_url ?? a.storage_url ?? "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-3 px-5 py-3 hover:bg-[var(--color-surface-2)]"
-                  >
-                    <Paperclip size={15} className="text-[var(--color-faint)] shrink-0" />
-                    <span className="text-[0.85rem] text-[var(--color-ink-2)] truncate flex-1">{a.filename}</span>
-                    <span className="chip">{a.parse_status}</span>
-                    <ExternalLink size={13} className="text-[var(--color-faint)]" />
-                  </a>
-                ))}
-              </div>
-            </Card>
-          )}
+          <DocumentsPanel opportunityId={opp.id} initial={attachments} />
         </div>
 
         <div className="space-y-5">

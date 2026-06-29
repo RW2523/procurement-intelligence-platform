@@ -108,4 +108,54 @@ export async function fetchJson<T = unknown>(url: string, opts: RequestOptions =
   return JSON.parse(r.text) as T;
 }
 
+/** Fetch a URL as binary (for downloading attachment documents). */
+export async function fetchBuffer(
+  url: string,
+  opts: RequestOptions = {},
+): Promise<{ buffer: Buffer; contentType: string; status: number; finalUrl: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? config.crawl.requestTimeoutMs);
+  if (opts.signal) {
+    if (opts.signal.aborted) controller.abort();
+    else opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+  const headers: Record<string, string> = {
+    "User-Agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+      "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    Accept: "*/*",
+    ...opts.headers,
+  };
+  if (opts.jar && opts.jar.size > 0) headers["Cookie"] = opts.jar.header();
+  try {
+    let lastErr: unknown;
+    // Government CDNs occasionally reset the TLS connection — retry transient failures.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch(url, {
+          method: opts.method ?? "GET",
+          headers,
+          redirect: opts.redirect ?? "follow",
+          signal: controller.signal,
+        });
+        if (opts.jar) opts.jar.ingest(res);
+        const buffer = Buffer.from(await res.arrayBuffer());
+        return {
+          buffer,
+          contentType: res.headers.get("content-type") ?? "application/octet-stream",
+          status: res.status,
+          finalUrl: res.url || url,
+        };
+      } catch (e) {
+        lastErr = e;
+        if (controller.signal.aborted || attempt === 2) break;
+        await sleep(1000);
+      }
+    }
+    throw lastErr;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

@@ -167,9 +167,11 @@ export interface Attachment {
   source_url: string | null;
   storage_url: string | null;
   file_type: string | null;
+  content_type: string | null;
   byte_size: number | null;
   parsed_text: string | null;
   parse_status: string;
+  fetch_error: string | null;
   downloaded_at: string | null;
   created_at: string;
 }

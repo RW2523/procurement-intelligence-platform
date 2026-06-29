@@ -3,6 +3,7 @@ import { getConnector } from "@/lib/connectors/registry";
 import { getRelevanceSettings, getCompanySettings } from "@/lib/db/settings";
 import { scoreRelevance, classifyRelevanceLLM, buildCompanyProfile } from "@/lib/ai/relevance";
 import { contentHash, fallbackExternalId } from "./hash";
+import { fetchOpportunityDocuments } from "./attachments";
 import { fmtDate } from "@/lib/utils";
 import type { NormalizedOpportunity, Source } from "@/lib/types";
 
@@ -249,6 +250,25 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
         if (llmScored) notes.push(`LLM bid/no-bid scored ${llmScored} new/amended item(s)`);
         if (toScore.length > capped.length)
           notes.push(`LLM scored ${capped.length}/${toScore.length}; remainder kept keyword score`);
+
+        // ── Download documents for the most relevant new/amended items (bounded) ──
+        const relevantIds = capped
+          .filter(({ id }) => {
+            const v = verdicts.get(id);
+            return v && (v.recommendation === "BID" || v.recommendation === "REVIEW");
+          })
+          .map((x) => x.id)
+          .slice(0, 4);
+        let docs = 0;
+        for (const id of relevantIds) {
+          try {
+            const r = await fetchOpportunityDocuments(id, { max: 2 });
+            docs += r.stored;
+          } catch {
+            /* never let a document fetch fail the crawl */
+          }
+        }
+        if (docs) notes.push(`Downloaded ${docs} document(s) for relevant items`);
       } catch (e) {
         warnings.push(`LLM relevance check skipped: ${(e as Error).message}`);
       }
