@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Inbox,
+  Briefcase,
   KanbanSquare,
   Radar,
   BookOpen,
@@ -17,6 +18,7 @@ import {
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/opportunities", label: "Opportunities", icon: Inbox },
+  { href: "/my-bids", label: "My Bids", icon: Briefcase },
   { href: "/board", label: "Pipeline Board", icon: KanbanSquare },
   { href: "/sources", label: "Sources", icon: Radar },
   { href: "/knowledge", label: "Knowledge Library", icon: BookOpen },
