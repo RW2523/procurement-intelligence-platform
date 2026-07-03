@@ -25,7 +25,21 @@ export async function POST(req: NextRequest) {
     await sb.from("opportunities").update({ pursuit_bucket: null }).not("id", "is", null);
   }
 
-  const { data: rows } = await sb
+  interface RescoreRow {
+    id: string;
+    title: string;
+    description: string | null;
+    category: string | null;
+    agency: string | null;
+    naics_code: string | null;
+    due_date: string | null;
+    estimated_value: number | null;
+    bid_recommendation: string | null;
+    relevance_score: number | null;
+    relevance_method: string | null;
+    source?: { state?: string | null } | null;
+  }
+  const { data } = await sb
     .from("opportunities")
     .select(
       "id, title, description, category, agency, naics_code, due_date, estimated_value, " +
@@ -34,7 +48,8 @@ export async function POST(req: NextRequest) {
     .is("pursuit_bucket", null)
     .order("first_seen_at", { ascending: false })
     .limit(batch);
-  if (!rows?.length) return NextResponse.json({ processed: 0, remaining: 0, done: true });
+  const rows = (data ?? []) as unknown as RescoreRow[];
+  if (!rows.length) return NextResponse.json({ processed: 0, remaining: 0, done: true });
 
   // Pull parsed document text for this batch in one query (few opps have docs).
   const ids = rows.map((r) => r.id);
