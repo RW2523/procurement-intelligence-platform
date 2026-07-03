@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceClient, dbConfigured } from "@/lib/supabase/server";
-import { getRelevanceSettings, getCompanySettings } from "@/lib/db/settings";
-import { classifyRelevanceLLM, buildCompanyProfile } from "@/lib/ai/relevance";
+import { getCompanySettings } from "@/lib/db/settings";
+import { classifyRelevanceLLM, buildProfileFromTargeting } from "@/lib/ai/relevance";
+import { getTargetingProfile } from "@/lib/targeting/profile";
 import type { BidRecommendation } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -38,8 +39,8 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!rows?.length) return NextResponse.json({ scored: 0, fallback: 0, remaining: 0, done: true, sample: [] });
 
-  const [rel, company] = await Promise.all([getRelevanceSettings(), getCompanySettings()]);
-  const profile = buildCompanyProfile(company, rel);
+  const [targeting, company] = await Promise.all([getTargetingProfile(), getCompanySettings()]);
+  const profile = buildProfileFromTargeting(company, targeting);
 
   const verdicts = await classifyRelevanceLLM(
     rows.map((r) => ({
