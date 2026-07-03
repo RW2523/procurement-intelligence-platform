@@ -59,7 +59,21 @@ export default async function AdminPage() {
         </Card>
 
         <Card>
-          <CardHeader title={<span className="flex items-center gap-2"><Target size={16} /> Relevance & bid/no-bid</span>} subtitle="What counts as a fit" />
+          <CardHeader
+            title={<span className="flex items-center gap-2"><Target size={16} /> Targeting profile</span>}
+            subtitle="The five-dimension search engine: capabilities, vehicles, set-asides, agencies, exclusions, weights & thresholds"
+            action={<a href="/admin/targeting" className="btn btn-primary btn-sm">Open editor</a>}
+          />
+          <div className="p-5 text-[0.83rem] text-[var(--color-muted)]">
+            The weighted targeting engine scores every crawled and uploaded opportunity
+            (Pursue ≥80 · Capture review 60–79 · Manual review 40–59 · Ignore &lt;40) and enforces
+            the ≥10-day response window. Edit keywords, points, and thresholds in the editor —
+            no code changes needed — then re-score everything with one click.
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title={<span className="flex items-center gap-2"><Target size={16} /> Relevance & bid/no-bid</span>} subtitle="Legacy keyword fit (superseded by the targeting profile)" />
           <div className="p-5"><RelevanceForm initial={relevance} /></div>
         </Card>
 

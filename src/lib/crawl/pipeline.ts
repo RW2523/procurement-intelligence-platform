@@ -1,7 +1,9 @@
 import { getServiceClient } from "@/lib/supabase/server";
 import { getConnector } from "@/lib/connectors/registry";
-import { getRelevanceSettings, getCompanySettings } from "@/lib/db/settings";
-import { scoreRelevance, classifyRelevanceLLM, buildCompanyProfile } from "@/lib/ai/relevance";
+import { getCompanySettings } from "@/lib/db/settings";
+import { classifyRelevanceLLM, buildProfileFromTargeting } from "@/lib/ai/relevance";
+import { getTargetingProfile } from "@/lib/targeting/profile";
+import { scoreOpportunity, type EngineResult } from "@/lib/targeting/engine";
 import { contentHash, fallbackExternalId } from "./hash";
 import { fetchOpportunityDocuments } from "./attachments";
 import { fmtDate } from "@/lib/utils";
@@ -61,7 +63,7 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
       throw new Error(`No connector registered for key "${source.connector_key ?? "(none)"}"`);
     }
 
-    const rel = await getRelevanceSettings();
+    const targeting = await getTargetingProfile();
     const result = await connector.fetchOpenOpportunities({ limit: opts.limit, signal: opts.signal });
     methodUsed = result.methodUsed;
     warnings.push(...result.warnings);
@@ -74,14 +76,34 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
     const existing = new Map((existingRows ?? []).map((r) => [r.external_id, r]));
     const seen = new Set<string>();
     // New / amended items to send through the LLM bid-no-bid check after the loop.
-    const toScore: { id: string; o: NormalizedOpportunity }[] = [];
+    const toScore: { id: string; o: NormalizedOpportunity; engine: EngineResult }[] = [];
 
     for (const o of result.opportunities) {
       const externalId = o.externalId?.trim() || fallbackExternalId(o);
       seen.add(externalId);
       const hash = contentHash(o);
       const ex = existing.get(externalId);
-      const { score, reason } = scoreRelevance(o, rel);
+      // ── Weighted targeting engine (five dimensions, deterministic, zero tokens) ──
+      const engine = scoreOpportunity(
+        {
+          title: o.title,
+          description: o.description,
+          category: o.category,
+          agency: o.agency,
+          naicsCode: o.naicsCode,
+          dueDate: o.dueDate ?? null,
+          estimatedValue: o.estimatedValue ?? null,
+          sourceState: source.state,
+        },
+        targeting,
+      );
+      const engineSummary = engine.excludedReason
+        ? `Excluded: ${engine.excludedReason}`
+        : engine.breakdown
+            .filter((b) => b.points > 0)
+            .slice(0, 4)
+            .map((b) => `${b.criterion} +${b.points}`)
+            .join(" · ") || "No targeting criteria matched";
       const fields = {
         title: o.title,
         agency: o.agency ?? null,
@@ -93,8 +115,18 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
         q_and_a_deadline: o.qAndADeadline ?? null,
         estimated_value: o.estimatedValue ?? null,
         detail_url: o.detailUrl ?? null,
-        relevance_score: score,
-        relevance_reason: reason,
+        relevance_score: Math.min(100, engine.pursuitScore),
+        relevance_reason: engineSummary,
+        relevance_method: "engine",
+        pursuit_score: engine.pursuitScore,
+        pursuit_bucket: engine.bucket,
+        urgency: engine.urgency,
+        set_asides: engine.setAsides,
+        contract_vehicle: engine.contractVehicle,
+        solicitation_type: engine.solicitationType,
+        agency_priority: engine.agencyPriority,
+        excluded_reason: engine.excludedReason,
+        score_breakdown: engine.breakdown as unknown as Record<string, unknown>[],
         content_hash: hash,
       };
 
@@ -111,7 +143,7 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
         }
         const oppId = inserted.id;
         newCount++;
-        toScore.push({ id: oppId, o });
+        toScore.push({ id: oppId, o, engine });
         await sb.from("opportunity_versions").insert({
           opportunity_id: oppId,
           version_no: 1,
@@ -137,14 +169,26 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
             })),
           );
         }
-        if (score >= 40) {
+        // Notify per bucket: PURSUE (≥80, due ≥10 days, not excluded) is the loud one.
+        if (engine.bucket === "PURSUE" && engine.urgency !== "INSUFFICIENT_TIME") {
           await sb.from("notifications").insert({
             type: "NEW_OPPORTUNITY",
-            title: `New: ${o.title}`,
-            body: `${source.name}${o.agency ? ` · ${o.agency}` : ""} · due ${fmtDate(o.dueDate)}`,
+            title: `Pursue: ${o.title}`,
+            body:
+              `Score ${engine.pursuitScore} · ${source.name}${o.agency ? ` · ${o.agency}` : ""}` +
+              ` · due ${fmtDate(o.dueDate)}${engine.setAsides.length ? ` · ${engine.setAsides[0]}` : ""}`,
             opportunity_id: oppId,
             source_id: source.id,
-            severity: score >= 70 ? "warning" : "info",
+            severity: "warning",
+          });
+        } else if (engine.bucket === "CAPTURE_REVIEW") {
+          await sb.from("notifications").insert({
+            type: "NEW_OPPORTUNITY",
+            title: `Capture review: ${o.title}`,
+            body: `Score ${engine.pursuitScore} · ${source.name}${o.agency ? ` · ${o.agency}` : ""} · due ${fmtDate(o.dueDate)}`,
+            opportunity_id: oppId,
+            source_id: source.id,
+            severity: "info",
           });
         }
       } else if (ex.content_hash !== hash) {
@@ -156,7 +200,7 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
           .update({ ...fields, status: newStatus, last_seen_at: nowISO() })
           .eq("id", ex.id);
         changedCount++;
-        toScore.push({ id: ex.id, o });
+        toScore.push({ id: ex.id, o, engine });
         const { data: vmax } = await sb
           .from("opportunity_versions")
           .select("version_no")
@@ -215,12 +259,17 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
       closedCount++;
     }
 
-    // ── LLM bid/no-bid check: refine new & amended items vs the company profile ──
-    if (toScore.length) {
+    // ── Stage 2: profile-aware LLM bid/no-bid on engine survivors only ─────────
+    // The deterministic engine already bucketed everything; the LLM is a second
+    // opinion on items worth tokens (≥ manual-review threshold, not excluded).
+    const survivors = toScore.filter(
+      ({ engine }) => !engine.excludedReason && engine.pursuitScore >= targeting.thresholds.manualReview,
+    );
+    if (survivors.length) {
       try {
-        const [company] = await Promise.all([getCompanySettings()]);
-        const profile = buildCompanyProfile(company, rel);
-        const capped = toScore.slice(0, 80); // bound per-run cost/time on serverless
+        const company = await getCompanySettings();
+        const profile = buildProfileFromTargeting(company, targeting);
+        const capped = survivors.slice(0, 80); // bound per-run cost/time on serverless
         const verdicts = await classifyRelevanceLLM(
           capped.map(({ id, o }) => ({
             id,
@@ -233,41 +282,55 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
           profile,
         );
         let llmScored = 0;
-        for (const { id } of capped) {
+        let disagreements = 0;
+        for (const { id, engine } of capped) {
           const v = verdicts.get(id);
           if (!v) continue;
+          // Engine says pursue-worthy but LLM says NO_BID (or inverse) → needs a human.
+          const disagree =
+            (engine.bucket === "PURSUE" && v.recommendation === "NO_BID") ||
+            (engine.bucket === "MANUAL_REVIEW" && v.recommendation === "BID");
+          if (disagree) disagreements++;
           await sb
             .from("opportunities")
             .update({
               relevance_score: v.score,
-              relevance_reason: v.reason,
+              relevance_reason: disagree ? `${v.reason} · ⚠ differs from engine — needs human review` : v.reason,
               bid_recommendation: v.recommendation,
               relevance_method: "llm",
             })
             .eq("id", id);
           llmScored++;
         }
-        if (llmScored) notes.push(`LLM bid/no-bid scored ${llmScored} new/amended item(s)`);
-        if (toScore.length > capped.length)
-          notes.push(`LLM scored ${capped.length}/${toScore.length}; remainder kept keyword score`);
-
-        // ── Download documents for the strong-fit new/amended items (BID first) ──
-        const byRec = (rec: string) =>
-          capped.filter(({ id }) => verdicts.get(id)?.recommendation === rec).map((x) => x.id);
-        const relevantIds = [...byRec("BID"), ...byRec("REVIEW")].slice(0, 12);
-        let docs = 0;
-        for (const id of relevantIds) {
-          try {
-            const r = await fetchOpportunityDocuments(id, { max: 4 });
-            docs += r.stored;
-          } catch {
-            /* never let a document fetch fail the crawl */
-          }
-        }
-        if (docs) notes.push(`Downloaded ${docs} document(s) for strong-fit items`);
+        if (llmScored) notes.push(`LLM verified ${llmScored} engine survivor(s)${disagreements ? `, ${disagreements} disagreement(s) flagged` : ""}`);
+        if (survivors.length > capped.length)
+          notes.push(`LLM verified ${capped.length}/${survivors.length}; remainder keep engine score`);
       } catch (e) {
         warnings.push(`LLM relevance check skipped: ${(e as Error).message}`);
       }
+    }
+    if (toScore.length) {
+      notes.push(
+        `Engine bucketed ${toScore.length} new/amended: ` +
+          `${toScore.filter((t) => t.engine.bucket === "PURSUE").length} pursue, ` +
+          `${toScore.filter((t) => t.engine.bucket === "CAPTURE_REVIEW").length} capture, ` +
+          `${toScore.filter((t) => t.engine.bucket === "MANUAL_REVIEW").length} manual, ` +
+          `${toScore.filter((t) => t.engine.bucket === "IGNORE").length} ignore`,
+      );
+
+      // ── Download documents for strong-fit new/amended items (PURSUE first) ────
+      const byBucket = (b: string) => toScore.filter(({ engine }) => engine.bucket === b).map((x) => x.id);
+      const relevantIds = [...byBucket("PURSUE"), ...byBucket("CAPTURE_REVIEW")].slice(0, 12);
+      let docs = 0;
+      for (const id of relevantIds) {
+        try {
+          const r = await fetchOpportunityDocuments(id, { max: 4 });
+          docs += r.stored;
+        } catch {
+          /* never let a document fetch fail the crawl */
+        }
+      }
+      if (docs) notes.push(`Downloaded ${docs} document(s) for strong-fit items`);
     }
 
     const durationMs = Date.now() - startedAt;

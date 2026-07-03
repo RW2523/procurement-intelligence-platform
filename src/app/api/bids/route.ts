@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceClient, dbConfigured } from "@/lib/supabase/server";
 import { getSourceBySlug } from "@/lib/crawl/runner";
 import { storeUploadedDocument } from "@/lib/crawl/attachments";
-import { classifyRelevanceLLM, buildCompanyProfile } from "@/lib/ai/relevance";
-import { getCompanySettings, getRelevanceSettings } from "@/lib/db/settings";
+import { classifyRelevanceLLM, buildProfileFromTargeting } from "@/lib/ai/relevance";
+import { getTargetingProfile } from "@/lib/targeting/profile";
+import { scoreOpportunity } from "@/lib/targeting/engine";
+import { getCompanySettings } from "@/lib/db/settings";
 import { contentHash } from "@/lib/crawl/hash";
 import type { NormalizedOpportunity, PipelineStage } from "@/lib/types";
 import { PIPELINE_STAGES } from "@/lib/types";
@@ -125,10 +127,49 @@ export async function POST(req: NextRequest) {
     else tooLarge++;
   }
 
-  // LLM bid/no-bid check against the company profile (same as crawled items).
+  // Targeting engine + LLM bid/no-bid check — same treatment as crawled items,
+  // including the text of the documents just uploaded.
   let scored = false;
   try {
-    const [company, rel] = await Promise.all([getCompanySettings(), getRelevanceSettings()]);
+    const [company, targeting, { data: atts }] = await Promise.all([
+      getCompanySettings(),
+      getTargetingProfile(),
+      sb.from("attachments").select("parsed_text").eq("opportunity_id", oppId),
+    ]);
+    const docText = (atts ?? []).map((a) => a.parsed_text).filter(Boolean).join("\n\n");
+    const engine = scoreOpportunity(
+      {
+        title,
+        description: normalized.description,
+        category: normalized.category,
+        agency: normalized.agency,
+        naicsCode: normalized.naicsCode,
+        docText: docText || null,
+        dueDate: normalized.dueDate ?? null,
+        estimatedValue,
+      },
+      targeting,
+    );
+    await sb
+      .from("opportunities")
+      .update({
+        pursuit_score: engine.pursuitScore,
+        pursuit_bucket: engine.bucket,
+        urgency: engine.urgency,
+        set_asides: engine.setAsides,
+        contract_vehicle: engine.contractVehicle,
+        solicitation_type: engine.solicitationType,
+        agency_priority: engine.agencyPriority,
+        excluded_reason: engine.excludedReason,
+        score_breakdown: engine.breakdown as unknown as Record<string, unknown>[],
+        relevance_score: Math.min(100, engine.pursuitScore),
+        relevance_reason:
+          engine.breakdown.filter((b) => b.points > 0).slice(0, 4).map((b) => `${b.criterion} +${b.points}`).join(" · ") ||
+          "No targeting criteria matched",
+        relevance_method: "engine",
+      })
+      .eq("id", oppId);
+
     const verdicts = await classifyRelevanceLLM(
       [
         {
@@ -136,11 +177,11 @@ export async function POST(req: NextRequest) {
           title,
           agency: normalized.agency,
           category: normalized.category,
-          description: normalized.description,
+          description: normalized.description || docText.slice(0, 320) || null,
           naicsCode: normalized.naicsCode,
         },
       ],
-      buildCompanyProfile(company, rel),
+      buildProfileFromTargeting(company, targeting),
     );
     const v = verdicts.get(oppId);
     if (v) {

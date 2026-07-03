@@ -8,6 +8,8 @@ export interface DashboardStats {
   totalOpen: number;
   newCount: number;
   relevantNew: number;
+  pursueNow: number;
+  captureReview: number;
   closingSoon: number;
   amended: number;
   submitted: number;
@@ -25,7 +27,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const [{ data: opps }, { count: respCount }] = await Promise.all([
     sb
       .from("opportunities")
-      .select("status, pipeline_stage, due_date, relevance_score, estimated_value, first_seen_at, source:sources(state)"),
+      .select("status, pipeline_stage, due_date, relevance_score, estimated_value, first_seen_at, pursuit_bucket, urgency, source:sources(state)"),
     sb.from("responses").select("*", { count: "exact", head: true }),
   ]);
 
@@ -35,6 +37,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   let totalOpen = 0,
     newCount = 0,
     relevantNew = 0,
+    pursueNow = 0,
+    captureReview = 0,
     closingSoon = 0,
     amended = 0,
     submitted = 0,
@@ -49,6 +53,10 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     if (status === "NEW") newCount++;
     if (status === "NEW" && (o.relevance_score ?? 0) >= 70) relevantNew++;
     if (status === "AMENDED") amended++;
+    // Targeting buckets: actionable = open with >= 10 days to respond (§10).
+    const actionable = open && o.urgency !== "INSUFFICIENT_TIME";
+    if (actionable && o.pursuit_bucket === "PURSUE") pursueNow++;
+    if (actionable && o.pursuit_bucket === "CAPTURE_REVIEW") captureReview++;
     if (o.pipeline_stage === "SUBMITTED") submitted++;
     if (o.pipeline_stage === "WON") won++;
     const d = daysUntil(o.due_date as string | null);
@@ -63,6 +71,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     totalOpen,
     newCount,
     relevantNew,
+    pursueNow,
+    captureReview,
     closingSoon,
     amended,
     submitted,

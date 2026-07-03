@@ -5,6 +5,8 @@ import type {
   SourceStatus,
   NotificationType,
   BidRecommendation,
+  PursuitBucket,
+  UrgencyBand,
 } from "@/lib/types";
 
 interface Style {
@@ -66,6 +68,23 @@ export const BID_REC_STYLES: Record<BidRecommendation, Style> = {
   BID: { label: "Bid", bg: "var(--color-mint-100)", fg: "var(--color-mint-700)", dot: "var(--color-mint-500)" },
   REVIEW: { label: "Review", bg: "var(--color-amber-100)", fg: "var(--color-amber-700)", dot: "var(--color-amber-500)" },
   NO_BID: { label: "No-bid", bg: "#eef0f4", fg: "#5b6170", dot: "#9aa1ad" },
+};
+
+/** §9 buckets: 80+ pursue immediately · 60–79 capture review · 40–59 manual review · <40 ignore. */
+export const BUCKET_STYLES: Record<PursuitBucket, Style> = {
+  PURSUE: { label: "Pursue", bg: "var(--color-mint-100)", fg: "var(--color-mint-700)", dot: "var(--color-mint-500)" },
+  CAPTURE_REVIEW: { label: "Capture review", bg: "var(--color-brand-50)", fg: "var(--color-brand-700)", dot: "var(--color-brand-500)" },
+  MANUAL_REVIEW: { label: "Manual review", bg: "var(--color-amber-100)", fg: "var(--color-amber-700)", dot: "var(--color-amber-500)" },
+  IGNORE: { label: "Ignored", bg: "#eef0f4", fg: "#5b6170", dot: "#9aa1ad" },
+};
+
+/** §10 urgency: 10–20d urgent · 21–45d standard · 46+d early capture · <10d insufficient. */
+export const URGENCY_STYLES: Record<UrgencyBand, Style> = {
+  URGENT: { label: "Urgent", bg: "var(--color-rose-100)", fg: "var(--color-rose-700)", dot: "var(--color-rose-500)" },
+  STANDARD: { label: "Standard", bg: "var(--color-sky-100)", fg: "var(--color-sky-700)", dot: "var(--color-sky-500)" },
+  EARLY_CAPTURE: { label: "Early capture", bg: "var(--color-mint-100)", fg: "var(--color-mint-700)", dot: "var(--color-mint-500)" },
+  INSUFFICIENT_TIME: { label: "< 10 days", bg: "#eef0f4", fg: "#5b6170", dot: "#9aa1ad" },
+  NO_DATE: { label: "No date", bg: "#eef0f4", fg: "#5b6170" },
 };
 
 export function relevanceStyle(score: number | null | undefined): Style {

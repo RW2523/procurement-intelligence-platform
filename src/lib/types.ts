@@ -54,6 +54,71 @@ export type KnowledgeOutcome = "won" | "lost" | "unknown";
 /** LLM bid/no-bid verdict for a solicitation against the company profile. */
 export type BidRecommendation = "BID" | "REVIEW" | "NO_BID";
 
+/** Weighted targeting-engine buckets (§9 thresholds: 80+/60–79/40–59/<40). */
+export type PursuitBucket = "PURSUE" | "CAPTURE_REVIEW" | "MANUAL_REVIEW" | "IGNORE";
+
+/** Due-date urgency bands (§10: <10 insufficient, 10–20 urgent, 21–45 standard, 46+ early). */
+export type UrgencyBand = "URGENT" | "STANDARD" | "EARLY_CAPTURE" | "INSUFFICIENT_TIME" | "NO_DATE";
+
+export const PURSUIT_BUCKETS: PursuitBucket[] = ["PURSUE", "CAPTURE_REVIEW", "MANUAL_REVIEW", "IGNORE"];
+
+/** One line of the "why this score" panel: a criterion that fired and its evidence. */
+export interface ScoreBreakdownEntry {
+  criterion: string;
+  points: number;
+  matched: string[];
+  note?: string;
+}
+
+// ── Targeting profile (the five-dimension search configuration) ─────────────
+export interface CapabilityGroup {
+  key: string;
+  label: string;
+  points: number;
+  phrases: string[];
+}
+
+export interface SetAsideTier {
+  label: string;
+  points: number;
+  terms: string[];
+}
+
+export interface ValueBand {
+  /** Upper bound (exclusive) in USD; the last band uses Infinity via null. */
+  maxUsd: number | null;
+  points: number;
+  label: string;
+}
+
+export interface TargetingProfile {
+  version: number;
+  /** Dimension 2a–2c: capability groups; labor categories & technologies map into them. */
+  capabilities: CapabilityGroup[];
+  laborCategories: { title: string; group: string }[];
+  technologies: { term: string; group: string }[];
+  /** Dimension 1b: functional areas ("many agencies don't describe by technology"). */
+  functionalAreas: { points: number; phrases: string[] };
+  /** Dimension 3: contract vehicles. */
+  vehicles: { gsaMasPoints: number; otherPoints: number; gsaTerms: string[]; otherTerms: string[] };
+  solicitationTypes: { term: string; points: number }[];
+  /** Dimension 4: socioeconomic set-asides, tiered. */
+  setAsides: SetAsideTier[];
+  /** Metadata: priority agencies. */
+  agencies: {
+    federalPoints: number;
+    statePoints: number;
+    federal: { name: string; aliases: string[]; itOnly?: boolean }[];
+    states: string[];
+  };
+  /** Dimension 5: exclusions. */
+  exclusions: { group: string; terms: string[] }[];
+  naics: { codes: string[]; points: number };
+  valueBands: ValueBand[];
+  thresholds: { pursue: number; captureReview: number; manualReview: number };
+  dateBands: { minDays: number; urgentMax: number; standardMax: number };
+}
+
 export const PIPELINE_STAGES: PipelineStage[] = [
   "BACKLOG",
   "REVIEWING",
@@ -132,6 +197,16 @@ export interface Opportunity {
   bid_recommendation: BidRecommendation | null;
   /** Which scorer produced the current relevance fields: 'keyword' | 'llm'. */
   relevance_method: string;
+  /** Weighted targeting-engine outputs (docs/TARGETING-ENGINE-PLAN.md). */
+  pursuit_score: number | null;
+  pursuit_bucket: PursuitBucket | null;
+  urgency: UrgencyBand | null;
+  set_asides: string[];
+  contract_vehicle: string | null;
+  solicitation_type: string | null;
+  agency_priority: boolean;
+  excluded_reason: string | null;
+  score_breakdown: ScoreBreakdownEntry[] | null;
   content_hash: string;
   assigned_to: string | null;
   first_seen_at: string;

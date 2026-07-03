@@ -16,7 +16,12 @@ export interface OppFilters {
   sourceId?: string;
   relevanceMin?: number;
   assignedTo?: string;
-  sort?: "due_date" | "relevance" | "newest";
+  /** Targeting-engine bucket: one bucket, or "ACTIONABLE" = PURSUE + CAPTURE_REVIEW. */
+  bucket?: string;
+  urgency?: string;
+  /** Minimum calendar days until due (the §10 "at least 10 days out" rule). */
+  minDays?: number;
+  sort?: "due_date" | "relevance" | "newest" | "score";
   limit?: number;
 }
 
@@ -48,6 +53,14 @@ export async function listOpportunities(filters: OppFilters = {}): Promise<Oppor
   if (filters.sourceId) q = q.eq("source_id", filters.sourceId);
   if (filters.assignedTo) q = q.eq("assigned_to", filters.assignedTo);
   if (filters.relevanceMin != null) q = q.gte("relevance_score", filters.relevanceMin);
+  if (filters.bucket === "ACTIONABLE") q = q.in("pursuit_bucket", ["PURSUE", "CAPTURE_REVIEW"]);
+  else if (filters.bucket === "INSUFFICIENT_TIME") q = q.eq("urgency", "INSUFFICIENT_TIME");
+  else if (filters.bucket) q = q.eq("pursuit_bucket", filters.bucket);
+  if (filters.urgency) q = q.eq("urgency", filters.urgency);
+  if (filters.minDays != null) {
+    const cutoff = new Date(Date.now() + filters.minDays * 86_400_000).toISOString();
+    q = q.gte("due_date", cutoff);
+  }
   // (state is filtered in JS below — it lives on the embedded `source` resource)
   if (filters.q) {
     const term = filters.q.replace(/[%,]/g, " ");
@@ -55,6 +68,7 @@ export async function listOpportunities(filters: OppFilters = {}): Promise<Oppor
   }
 
   if (filters.sort === "relevance") q = q.order("relevance_score", { ascending: false, nullsFirst: false });
+  else if (filters.sort === "score") q = q.order("pursuit_score", { ascending: false, nullsFirst: false });
   else if (filters.sort === "due_date") q = q.order("due_date", { ascending: true, nullsFirst: false });
   else q = q.order("first_seen_at", { ascending: false });
 

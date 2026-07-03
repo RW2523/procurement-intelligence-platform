@@ -46,7 +46,7 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         <Stat label="Open opportunities" value={stats.totalOpen} icon={<Inbox size={15} />} hint={`${stats.totalOpps} tracked total`} />
-        <Stat label="New to review" value={stats.newCount} icon={<Sparkles size={15} />} accent="var(--color-brand-50)" hint={`${stats.relevantNew} strong fit`} />
+        <Stat label="Pursue now" value={stats.pursueNow} icon={<Sparkles size={15} />} accent="var(--color-mint-100)" hint={`${stats.captureReview} in capture review`} />
         <Stat label="Closing ≤ 7 days" value={stats.closingSoon} icon={<Clock size={15} />} accent="var(--color-rose-100)" hint="Submission deadlines" />
         <Stat label="Amended" value={stats.amended} icon={<Target size={15} />} accent="var(--color-amber-100)" hint="May need re-review" />
         <Stat label="Drafts generated" value={stats.totalResponses} icon={<FileText size={15} />} accent="var(--color-violet-100)" hint={`${stats.submitted} submitted`} />

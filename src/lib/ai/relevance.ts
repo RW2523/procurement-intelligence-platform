@@ -3,6 +3,7 @@ import type {
   RelevanceSettings,
   CompanySettings,
   BidRecommendation,
+  TargetingProfile,
 } from "@/lib/types";
 import { config } from "@/lib/config";
 import { llmGenerate } from "./llm";
@@ -65,6 +66,31 @@ export function buildCompanyProfile(company: CompanySettings, rel: RelevanceSett
     caps ? `Capabilities: ${caps}` : "",
     rel.keywords?.length ? `Target keywords: ${rel.keywords.join(", ")}` : "",
     rel.naics?.length ? `Target NAICS: ${rel.naics.join(", ")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * Company-profile prompt built from the five-dimension Targeting Profile — the LLM
+ * judges against the same capabilities, certifications, agencies, and exclusions the
+ * deterministic engine scores with (docs/TARGETING-ENGINE-PLAN.md §4.6).
+ */
+export function buildProfileFromTargeting(company: CompanySettings, tp: TargetingProfile): string {
+  const caps = tp.capabilities.map((c) => c.label).join(", ");
+  const certs = "SBA-certified 8(a), Woman-Owned Small Business (WOSB), and Minority Business Enterprise (MBE)";
+  const fed = tp.agencies.federal.map((f) => f.name).join(", ");
+  const states = tp.agencies.states.join(", ");
+  const excl = tp.exclusions.map((e) => e.group).join(", ");
+  return [
+    `Company: ${company.name}`,
+    company.about ? `About: ${company.about}` : "",
+    `Certifications: ${certs} — set-aside opportunities matching these are top priority.`,
+    `Core capabilities: ${caps}`,
+    `Target NAICS: ${tp.naics.codes.join(", ")}`,
+    `Priority agencies — federal: ${fed}. DoD only for IT work.`,
+    `Priority states: ${states}`,
+    `Out of scope (NO_BID unless a substantial IT component): ${excl}`,
   ]
     .filter(Boolean)
     .join("\n");

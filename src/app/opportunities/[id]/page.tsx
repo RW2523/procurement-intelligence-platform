@@ -23,10 +23,11 @@ import { getResponsesForOpp, getRevisions } from "@/lib/db/responses";
 import { listUsers } from "@/lib/db/users";
 import { Card, CardHeader, Badge, RelevanceBar } from "@/components/ui";
 import { StatusControls } from "@/components/opportunities/StatusControls";
+import { ScoreBreakdown } from "@/components/opportunities/ScoreBreakdown";
 import { DocumentsPanel } from "@/components/opportunities/DocumentsPanel";
 import { ResponseWorkspace, type ResponseWithRevisions } from "@/components/responses/ResponseWorkspace";
 import { SetupNotice } from "@/components/SetupNotice";
-import { OPP_STATUS_STYLES, PIPELINE_STYLES, relevanceStyle, BID_REC_STYLES } from "@/lib/status";
+import { OPP_STATUS_STYLES, PIPELINE_STYLES, relevanceStyle, BID_REC_STYLES, BUCKET_STYLES } from "@/lib/status";
 import { fmtDate, fmtDateTime, deadlineLabel, fmtCurrency, daysUntil } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +68,14 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
           <div className="flex items-center gap-2 flex-wrap mb-1.5">
             <Badge label={st.label} bg={st.bg} fg={st.fg} dot={st.dot} />
             <Badge label={stage.label} bg={stage.bg} fg={stage.fg} dot={stage.dot} />
+            {opp.pursuit_bucket && (
+              <Badge
+                label={`${opp.pursuit_score} · ${BUCKET_STYLES[opp.pursuit_bucket].label}`}
+                bg={BUCKET_STYLES[opp.pursuit_bucket].bg}
+                fg={BUCKET_STYLES[opp.pursuit_bucket].fg}
+                dot={BUCKET_STYLES[opp.pursuit_bucket].dot}
+              />
+            )}
             <Badge label={rel.label} bg={rel.bg} fg={rel.fg} />
             <span className="chip">{opp.source?.name}{opp.source?.state ? ` · ${opp.source.state}` : ""}</span>
           </div>
@@ -114,6 +123,8 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
               </div>
             )}
           </Card>
+
+          <ScoreBreakdown opp={opp} />
 
           <Card>
             <CardHeader

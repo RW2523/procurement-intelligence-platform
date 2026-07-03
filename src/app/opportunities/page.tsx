@@ -25,13 +25,17 @@ export default async function OpportunitiesPage({
 
   const sp = await searchParams;
   const str = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  // Default view: the targeting engine's actionable shortlist — Pursue + Capture
+  // review with at least 10 calendar days to respond (§10). "?view=" overrides.
+  const view = str(sp.view) ?? "ACTIONABLE";
   const filters: OppFilters = {
     q: str(sp.q),
     state: str(sp.state),
     status: str(sp.status),
-    sort: (str(sp.sort) as OppFilters["sort"]) ?? "newest",
-    // "Strong fit only" is ON by default — show all only when explicitly turned off (?relevant=0).
-    relevanceMin: str(sp.relevant) === "0" ? undefined : 70,
+    urgency: str(sp.urgency),
+    sort: (str(sp.sort) as OppFilters["sort"]) ?? "score",
+    bucket: view === "ALL" ? undefined : view,
+    minDays: view === "ACTIONABLE" || view === "PURSUE" || view === "CAPTURE_REVIEW" ? 10 : undefined,
     limit: 400,
   };
   const opps = await listOpportunities(filters);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runAllCrawls } from "@/lib/crawl/runner";
 import { scanDeadlines } from "@/lib/notify/deadlines";
+import { refreshUrgencyBands } from "@/lib/targeting/refresh";
 import { dbConfigured } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -19,7 +20,9 @@ async function run(req: NextRequest) {
   }
   const summaries = await runAllCrawls({ trigger: "scheduled" });
   const deadlines = await scanDeadlines();
-  return NextResponse.json({ ranAt: new Date().toISOString(), summaries, deadlines });
+  // Urgency bands drift daily as deadlines approach (§10) — refresh them.
+  const urgency = await refreshUrgencyBands();
+  return NextResponse.json({ ranAt: new Date().toISOString(), summaries, deadlines, urgency });
 }
 
 export const GET = run;
