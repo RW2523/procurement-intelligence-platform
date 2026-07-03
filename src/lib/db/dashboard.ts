@@ -1,4 +1,5 @@
 import { getServiceClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/db/fetchAll";
 import { daysUntil } from "@/lib/utils";
 import { CLOSING_SOON_DAYS } from "@/lib/defaults";
 import type { OppStatus } from "@/lib/types";
@@ -28,14 +29,13 @@ const OPEN = new Set(["NEW", "OPEN", "AMENDED", "CLOSING_SOON"]);
 
 export async function getDashboardStats(): Promise<DashboardStats> {
   const sb = getServiceClient();
-  const [{ data: opps }, { count: respCount }] = await Promise.all([
-    sb
-      .from("opportunities")
-      .select("status, pipeline_stage, due_date, relevance_score, estimated_value, first_seen_at, pursuit_bucket, urgency, source:sources(state)"),
+  const [rows, { count: respCount }] = await Promise.all([
+    fetchAllRows(
+      "opportunities",
+      "status, pipeline_stage, due_date, relevance_score, estimated_value, first_seen_at, pursuit_bucket, urgency, source:sources(state)",
+    ),
     sb.from("responses").select("*", { count: "exact", head: true }),
   ]);
-
-  const rows = opps ?? [];
   const byStatus: Partial<Record<OppStatus, number>> = {};
   const stateMap = new Map<string, number>();
   const urgencyMap = new Map<string, number>();

@@ -1,4 +1,5 @@
 import { getServiceClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/db/fetchAll";
 import { PIPELINE_STAGES, type PipelineStage } from "@/lib/types";
 
 export interface Analytics {
@@ -22,12 +23,11 @@ export interface Analytics {
 
 export async function getAnalytics(): Promise<Analytics> {
   const sb = getServiceClient();
-  const [{ data: opps }, { data: responses }, { data: runs }, { data: submittedLog }] = await Promise.all([
-    sb
-      .from("opportunities")
-      .select(
-        "pipeline_stage, relevance_score, first_seen_at, status, pursuit_score, pursuit_bucket, excluded_reason, source:sources(state, name)",
-      ),
+  const [rows, { data: responses }, { data: runs }, { data: submittedLog }] = await Promise.all([
+    fetchAllRows(
+      "opportunities",
+      "pipeline_stage, relevance_score, first_seen_at, status, pursuit_score, pursuit_bucket, excluded_reason, source:sources(state, name)",
+    ),
     sb.from("responses").select("mode"),
     sb.from("crawl_runs").select("status").limit(200),
     sb
@@ -37,7 +37,6 @@ export async function getAnalytics(): Promise<Analytics> {
       .eq("new_value", "SUBMITTED"),
   ]);
 
-  const rows = opps ?? [];
   const stageCount = new Map<PipelineStage, number>();
   const stateMap = new Map<string, { open: number; total: number }>();
   let relSum = 0,
