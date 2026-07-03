@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, GripVertical } from "lucide-react";
 import { PIPELINE_STAGES, type OpportunityView, type PipelineStage } from "@/lib/types";
-import { PIPELINE_STYLES, OPP_STATUS_STYLES } from "@/lib/status";
+import { PIPELINE_STYLES, OPP_STATUS_STYLES, BUCKET_STYLES, URGENCY_STYLES } from "@/lib/status";
 import { setStageAction } from "@/app/actions";
 import { fmtDate, deadlineLabel, daysUntil, cn } from "@/lib/utils";
 
@@ -71,9 +71,26 @@ export function BoardClient({ board }: { board: Record<PipelineStage, Opportunit
                       </Link>
                     </div>
                     <div className="text-[0.7rem] text-[var(--color-faint)] mt-1 font-mono">{o.external_id}</div>
-                    <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center flex-wrap gap-1 mt-2">
                       <span className="badge" style={{ background: st.bg, color: st.fg }}>{st.label}</span>
-                      <span className="chip">{o.source?.state ?? "—"}</span>
+                      {o.pursuit_bucket && (
+                        <span
+                          className="badge"
+                          style={{ background: BUCKET_STYLES[o.pursuit_bucket].bg, color: BUCKET_STYLES[o.pursuit_bucket].fg }}
+                          title={`Targeting score ${o.pursuit_score}`}
+                        >
+                          {o.pursuit_score} · {BUCKET_STYLES[o.pursuit_bucket].label}
+                        </span>
+                      )}
+                      {o.urgency && o.urgency !== "NO_DATE" && (
+                        <span
+                          className="badge"
+                          style={{ background: URGENCY_STYLES[o.urgency].bg, color: URGENCY_STYLES[o.urgency].fg }}
+                        >
+                          {URGENCY_STYLES[o.urgency].label}
+                        </span>
+                      )}
+                      <span className="chip ml-auto">{o.source?.state ?? "—"}</span>
                     </div>
                     {o.due_date && (
                       <div className={`text-[0.7rem] mt-1.5 ${closing ? "text-[var(--color-rose-700)] font-medium" : "text-[var(--color-faint)]"}`}>

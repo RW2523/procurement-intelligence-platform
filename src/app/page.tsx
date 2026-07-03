@@ -46,7 +46,13 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         <Stat label="Open opportunities" value={stats.totalOpen} icon={<Inbox size={15} />} hint={`${stats.totalOpps} tracked total`} />
-        <Stat label="Pursue now" value={stats.pursueNow} icon={<Sparkles size={15} />} accent="var(--color-mint-100)" hint={`${stats.captureReview} in capture review`} />
+        <Stat
+          label="Pursue now"
+          value={stats.pursueNow}
+          icon={<Sparkles size={15} />}
+          accent="var(--color-mint-100)"
+          hint={`${stats.newPursue} new since yesterday · ${stats.captureReview} capture review`}
+        />
         <Stat label="Closing ≤ 7 days" value={stats.closingSoon} icon={<Clock size={15} />} accent="var(--color-rose-100)" hint="Submission deadlines" />
         <Stat label="Amended" value={stats.amended} icon={<Target size={15} />} accent="var(--color-amber-100)" hint="May need re-review" />
         <Stat label="Drafts generated" value={stats.totalResponses} icon={<FileText size={15} />} accent="var(--color-violet-100)" hint={`${stats.submitted} submitted`} />
@@ -97,6 +103,24 @@ export default async function DashboardPage() {
                     </div>
                     <Badge label={st.label} bg={st.bg} fg={st.fg} dot={st.dot} />
                   </Link>
+                );
+              })}
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader title="Urgency mix" subtitle="Open opportunities by §10 response window" />
+            <div className="px-5 py-4 space-y-3">
+              {stats.urgencyDist.map((u) => {
+                const max = Math.max(...stats.urgencyDist.map((x) => x.count), 1);
+                return (
+                  <div key={u.band} className="flex items-center gap-3">
+                    <span className="w-36 text-[0.76rem] text-[var(--color-ink-2)]">{u.label}</span>
+                    <div className="flex-1 h-2 rounded-full bg-[var(--color-surface-2)] overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${(u.count / max) * 100}%`, background: u.color }} />
+                    </div>
+                    <span className="text-[0.78rem] tabular-nums text-[var(--color-muted)] w-10 text-right">{u.count}</span>
+                  </div>
                 );
               })}
             </div>

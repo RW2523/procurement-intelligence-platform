@@ -33,6 +33,8 @@ export default async function OpportunitiesPage({
     state: str(sp.state),
     status: str(sp.status),
     urgency: str(sp.urgency),
+    setAside: str(sp.setAside),
+    vehicle: str(sp.vehicle),
     sort: (str(sp.sort) as OppFilters["sort"]) ?? "score",
     bucket: view === "ALL" ? undefined : view,
     minDays: view === "ACTIONABLE" || view === "PURSUE" || view === "CAPTURE_REVIEW" ? 10 : undefined,

@@ -61,6 +61,27 @@ export function OpportunityFilters() {
         <option value="EARLY_CAPTURE">Early capture (46+ days)</option>
       </select>
 
+      <select className="input w-auto" value={sp.get("setAside") ?? ""} onChange={(e) => update({ setAside: e.target.value })}>
+        <option value="">Any set-aside status</option>
+        <option value="ANY">Has a set-aside</option>
+        <option value="8(a)">8(a)</option>
+        <option value="WOSB">WOSB / EDWOSB</option>
+        <option value="Sole Source">Sole Source / Direct Award</option>
+        <option value="Small Business">Small Business</option>
+        <option value="HUBZone">HUBZone</option>
+        <option value="SDVOSB">SDVOSB</option>
+        <option value="MBE">MBE</option>
+      </select>
+
+      <select className="input w-auto" value={sp.get("vehicle") ?? ""} onChange={(e) => update({ vehicle: e.target.value })}>
+        <option value="">Any vehicle</option>
+        <option value="ANY">Has a vehicle</option>
+        <option value="GSA MAS">GSA MAS</option>
+        <option value="BPA">BPA</option>
+        <option value="Blanket Purchase Agreement">Blanket Purchase Agreement</option>
+        <option value="Task Order">Task Order</option>
+      </select>
+
       <select className="input w-auto" value={sp.get("state") ?? ""} onChange={(e) => update({ state: e.target.value })}>
         <option value="">All states</option>
         {STATES.map((s) => (

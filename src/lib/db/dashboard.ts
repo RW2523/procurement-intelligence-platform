@@ -10,6 +10,10 @@ export interface DashboardStats {
   relevantNew: number;
   pursueNow: number;
   captureReview: number;
+  /** PURSUE items first seen in the last 24h ("new since yesterday"). */
+  newPursue: number;
+  /** Open-opportunity §10 urgency distribution. */
+  urgencyDist: { band: string; label: string; count: number; color: string }[];
   closingSoon: number;
   amended: number;
   submitted: number;
@@ -34,11 +38,13 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const rows = opps ?? [];
   const byStatus: Partial<Record<OppStatus, number>> = {};
   const stateMap = new Map<string, number>();
+  const urgencyMap = new Map<string, number>();
   let totalOpen = 0,
     newCount = 0,
     relevantNew = 0,
     pursueNow = 0,
     captureReview = 0,
+    newPursue = 0,
     closingSoon = 0,
     amended = 0,
     submitted = 0,
@@ -57,6 +63,15 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     const actionable = open && o.urgency !== "INSUFFICIENT_TIME";
     if (actionable && o.pursuit_bucket === "PURSUE") pursueNow++;
     if (actionable && o.pursuit_bucket === "CAPTURE_REVIEW") captureReview++;
+    if (
+      actionable &&
+      o.pursuit_bucket === "PURSUE" &&
+      o.first_seen_at &&
+      Date.now() - new Date(o.first_seen_at as string).getTime() < 86_400_000
+    ) {
+      newPursue++;
+    }
+    if (open && o.urgency) urgencyMap.set(o.urgency as string, (urgencyMap.get(o.urgency as string) ?? 0) + 1);
     if (o.pipeline_stage === "SUBMITTED") submitted++;
     if (o.pipeline_stage === "WON") won++;
     const d = daysUntil(o.due_date as string | null);
@@ -73,6 +88,13 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     relevantNew,
     pursueNow,
     captureReview,
+    newPursue,
+    urgencyDist: [
+      { band: "URGENT", label: "Urgent (10–20d)", color: "var(--color-rose-500)" },
+      { band: "STANDARD", label: "Standard (21–45d)", color: "var(--color-sky-500)" },
+      { band: "EARLY_CAPTURE", label: "Early capture (46+d)", color: "var(--color-mint-500)" },
+      { band: "INSUFFICIENT_TIME", label: "< 10 days", color: "#9aa1ad" },
+    ].map((b) => ({ ...b, count: urgencyMap.get(b.band) ?? 0 })),
     closingSoon,
     amended,
     submitted,

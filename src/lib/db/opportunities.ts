@@ -19,6 +19,10 @@ export interface OppFilters {
   /** Targeting-engine bucket: one bucket, or "ACTIONABLE" = PURSUE + CAPTURE_REVIEW. */
   bucket?: string;
   urgency?: string;
+  /** Set-aside label prefix ("8(a)", "WOSB"…) or "ANY" = any detected set-aside. */
+  setAside?: string;
+  /** Contract vehicle ("GSA MAS", "Task Order"…) or "ANY" = any detected vehicle. */
+  vehicle?: string;
   /** Minimum calendar days until due (the §10 "at least 10 days out" rule). */
   minDays?: number;
   sort?: "due_date" | "relevance" | "newest" | "score";
@@ -57,6 +61,9 @@ export async function listOpportunities(filters: OppFilters = {}): Promise<Oppor
   else if (filters.bucket === "INSUFFICIENT_TIME") q = q.eq("urgency", "INSUFFICIENT_TIME");
   else if (filters.bucket) q = q.eq("pursuit_bucket", filters.bucket);
   if (filters.urgency) q = q.eq("urgency", filters.urgency);
+  if (filters.setAside === "ANY") q = q.neq("set_asides", "{}");
+  if (filters.vehicle === "ANY") q = q.not("contract_vehicle", "is", null);
+  else if (filters.vehicle) q = q.eq("contract_vehicle", filters.vehicle);
   if (filters.minDays != null) {
     const cutoff = new Date(Date.now() + filters.minDays * 86_400_000).toISOString();
     q = q.gte("due_date", cutoff);
@@ -78,6 +85,10 @@ export async function listOpportunities(filters: OppFilters = {}): Promise<Oppor
   let rows = ((data ?? []) as unknown as Record<string, unknown>[]).map(shape);
   // state filter on embedded resource can return nulls; drop rows whose source filtered out
   if (filters.state) rows = rows.filter((r) => r.source?.state === filters.state);
+  // specific set-aside labels are prefix-matched against the detected array
+  if (filters.setAside && filters.setAside !== "ANY") {
+    rows = rows.filter((r) => r.set_asides?.some((s) => s.startsWith(filters.setAside!)));
+  }
   return rows;
 }
 
