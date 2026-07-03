@@ -19,10 +19,10 @@ export async function POST(req: NextRequest) {
   const recs = Array.isArray(body.recommendations) ? (body.recommendations as string[]) : ["BID"];
   const sb = getServiceClient();
 
-  // Portals whose documents are discoverable from the detail-page HTML. (NC keeps
-  // documents behind a Dataverse subgrid, so NC opps are only processed when their
-  // attachments were already discovered — otherwise the loop would never converge.)
-  const DISCOVERABLE = new Set(["tn", "ma", "pa", "ar"]);
+  // Portals whose documents are discoverable from the detail page. NC now resolves
+  // via the Power Pages / Dataverse notes API (src/lib/crawl/discovery.ts), so it's
+  // included; documents_checked_at still converges the loop for opps with no files.
+  const DISCOVERABLE = new Set(["nc", "tn", "ma", "pa", "ar"]);
 
   // Strong-fit opportunities that have a detail page to discover documents from.
   const { data: candidates } = await sb
