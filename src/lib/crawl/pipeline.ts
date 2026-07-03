@@ -259,12 +259,11 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
       closedCount++;
     }
 
-    // ── Stage 2: profile-aware LLM bid/no-bid on engine survivors only ─────────
-    // The deterministic engine already bucketed everything; the LLM is a second
-    // opinion on items worth tokens (≥ manual-review threshold, not excluded).
-    const survivors = toScore.filter(
-      ({ engine }) => !engine.excludedReason && engine.pursuitScore >= targeting.thresholds.manualReview,
-    );
+    // ── Stage 2: profile-aware LLM bid/no-bid on engine survivors ──────────────
+    // Excluded items never reach the LLM (that's where the §8 noise reduction cuts
+    // token cost); everything else gets the AI check because thin state-portal
+    // titles routinely under-score on exact-phrase matching.
+    const survivors = toScore.filter(({ engine }) => !engine.excludedReason);
     if (survivors.length) {
       try {
         const company = await getCompanySettings();
@@ -286,20 +285,35 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
         for (const { id, engine } of capped) {
           const v = verdicts.get(id);
           if (!v) continue;
-          // Engine says pursue-worthy but LLM says NO_BID (or inverse) → needs a human.
-          const disagree =
-            (engine.bucket === "PURSUE" && v.recommendation === "NO_BID") ||
-            (engine.bucket === "MANUAL_REVIEW" && v.recommendation === "BID");
+          // Engine says pursue-worthy but LLM says NO_BID → flag for a human.
+          const disagree = engine.bucket === "PURSUE" && v.recommendation === "NO_BID";
           if (disagree) disagreements++;
-          await sb
-            .from("opportunities")
-            .update({
-              relevance_score: v.score,
-              relevance_reason: disagree ? `${v.reason} · ⚠ differs from engine — needs human review` : v.reason,
-              bid_recommendation: v.recommendation,
-              relevance_method: "llm",
-            })
-            .eq("id", id);
+          // AI-analyst promotion: thin state-portal listings often lack the profile's
+          // phrase vocabulary ("ShareGate", "PAM solution"), so a confident LLM BID
+          // lifts the item into the shortlist — transparently, never past an exclusion.
+          const promoted =
+            v.recommendation === "BID" &&
+            !engine.excludedReason &&
+            (engine.bucket === "MANUAL_REVIEW" || engine.bucket === "IGNORE");
+          const patch: Record<string, unknown> = {
+            relevance_score: v.score,
+            relevance_reason: disagree ? `${v.reason} · ⚠ differs from engine — needs human review` : v.reason,
+            bid_recommendation: v.recommendation,
+            relevance_method: "llm",
+          };
+          if (promoted) {
+            patch.pursuit_bucket = v.score >= 90 ? "PURSUE" : "CAPTURE_REVIEW";
+            patch.score_breakdown = [
+              ...engine.breakdown,
+              {
+                criterion: "AI analyst promotion",
+                points: 0,
+                matched: [v.reason.slice(0, 80)],
+                note: `Engine scored ${engine.pursuitScore} (thin listing text); profile-aware AI rated BID (${v.score}/100)`,
+              },
+            ] as unknown as Record<string, unknown>[];
+          }
+          await sb.from("opportunities").update(patch).eq("id", id);
           llmScored++;
         }
         if (llmScored) notes.push(`LLM verified ${llmScored} engine survivor(s)${disagreements ? `, ${disagreements} disagreement(s) flagged` : ""}`);

@@ -27,7 +27,10 @@ export async function POST(req: NextRequest) {
 
   const { data: rows } = await sb
     .from("opportunities")
-    .select("id, title, description, category, agency, naics_code, due_date, estimated_value, source:sources(state)")
+    .select(
+      "id, title, description, category, agency, naics_code, due_date, estimated_value, " +
+        "bid_recommendation, relevance_score, relevance_method, source:sources(state)",
+    )
     .is("pursuit_bucket", null)
     .order("first_seen_at", { ascending: false })
     .limit(batch);
@@ -61,19 +64,37 @@ export async function POST(req: NextRequest) {
       },
       profile,
     );
-    buckets[engine.bucket] = (buckets[engine.bucket] ?? 0) + 1;
+    // AI-analyst promotion: re-apply the stored profile-aware LLM verdict (no new
+    // tokens) — a confident BID on a thin listing lifts it into the shortlist,
+    // never past an exclusion. Recorded transparently in the breakdown.
+    let bucket = engine.bucket;
+    let breakdown = engine.breakdown;
+    const llmBid = r.relevance_method === "llm" && r.bid_recommendation === "BID";
+    if (llmBid && !engine.excludedReason && (bucket === "MANUAL_REVIEW" || bucket === "IGNORE")) {
+      bucket = (r.relevance_score ?? 0) >= 90 ? "PURSUE" : "CAPTURE_REVIEW";
+      breakdown = [
+        ...engine.breakdown,
+        {
+          criterion: "AI analyst promotion",
+          points: 0,
+          matched: ["profile-aware LLM rated BID"],
+          note: `Engine scored ${engine.pursuitScore} (thin listing text); AI bid/no-bid rated BID (${r.relevance_score}/100)`,
+        },
+      ];
+    }
+    buckets[bucket] = (buckets[bucket] ?? 0) + 1;
     await sb
       .from("opportunities")
       .update({
         pursuit_score: engine.pursuitScore,
-        pursuit_bucket: engine.bucket,
+        pursuit_bucket: bucket,
         urgency: engine.urgency,
         set_asides: engine.setAsides,
         contract_vehicle: engine.contractVehicle,
         solicitation_type: engine.solicitationType,
         agency_priority: engine.agencyPriority,
         excluded_reason: engine.excludedReason,
-        score_breakdown: engine.breakdown as unknown as Record<string, unknown>[],
+        score_breakdown: breakdown as unknown as Record<string, unknown>[],
       })
       .eq("id", r.id);
   }
