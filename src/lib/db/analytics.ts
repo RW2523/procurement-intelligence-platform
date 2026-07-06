@@ -23,10 +23,24 @@ export interface Analytics {
 
 export async function getAnalytics(): Promise<Analytics> {
   const sb = getServiceClient();
+  // A source map avoids a per-row join over the full corpus (the join under load can
+  // hit Postgres's statement timeout); we resolve state/name in JS instead.
+  const { data: srcRows } = await sb.from("sources").select("id, state, name");
+  const sourceMap = new Map((srcRows ?? []).map((s) => [s.id as string, { state: s.state as string | null, name: s.name as string }]));
+
   const [rows, { data: responses }, { data: runs }, { data: submittedLog }] = await Promise.all([
-    fetchAllRows(
+    fetchAllRows<{
+      pipeline_stage: string;
+      relevance_score: number | null;
+      first_seen_at: string;
+      status: string;
+      pursuit_score: number | null;
+      pursuit_bucket: string | null;
+      excluded_reason: string | null;
+      source_id: string;
+    }>(
       "opportunities",
-      "pipeline_stage, relevance_score, first_seen_at, status, pursuit_score, pursuit_bucket, excluded_reason, source:sources(state, name)",
+      "pipeline_stage, relevance_score, first_seen_at, status, pursuit_score, pursuit_bucket, excluded_reason, source_id",
     ),
     sb.from("responses").select("mode"),
     sb.from("crawl_runs").select("status").limit(200),
@@ -58,7 +72,7 @@ export async function getAnalytics(): Promise<Analytics> {
       relSum += Number(o.relevance_score);
       relN++;
     }
-    const src = (o as { source?: { state?: string; name?: string } }).source;
+    const src = sourceMap.get(o.source_id);
     const state = src?.state;
     if (state) {
       const e = stateMap.get(state) ?? { open: 0, total: 0 };
