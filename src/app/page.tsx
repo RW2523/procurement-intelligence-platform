@@ -9,7 +9,7 @@ import { OpportunityTable } from "@/components/opportunities/OpportunityTable";
 import { RunCrawlButton } from "@/components/RunCrawlButton";
 import { SetupNotice } from "@/components/SetupNotice";
 import { SOURCE_STATUS_STYLES } from "@/lib/status";
-import { fmtDateTime, daysUntil } from "@/lib/utils";
+import { fmtDateTime } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -23,20 +23,16 @@ export default async function DashboardPage() {
     );
   }
 
-  const [stats, recentNew, openByDue, sources] = await Promise.all([
+  const nowIso = new Date().toISOString();
+  const soonIso = new Date(Date.now() + 7 * 86_400_000).toISOString();
+  const [stats, recentNew, closingSoon, sources] = await Promise.all([
     getDashboardStats(),
     listOpportunities({ status: "NEW", sort: "newest", limit: 8 }),
-    listOpportunities({ sort: "due_date", limit: 250 }),
+    // Query the closing-soon list directly (open + due within 7 days) instead of
+    // pulling hundreds of rows and filtering in JS — keeps the landing page fast.
+    listOpportunities({ openOnly: true, dueFrom: nowIso, dueBefore: soonIso, sort: "due_date", limit: 8 }),
     listSourceHealth(),
   ]);
-
-  const closingSoon = openByDue
-    .filter((o) => ["NEW", "OPEN", "AMENDED", "CLOSING_SOON"].includes(o.status))
-    .filter((o) => {
-      const d = daysUntil(o.due_date);
-      return d !== null && d >= 0 && d <= 7;
-    })
-    .slice(0, 8);
 
   const today = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" }).format(new Date());
 

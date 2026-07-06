@@ -25,9 +25,17 @@ export interface OppFilters {
   vehicle?: string;
   /** Minimum calendar days until due (the §10 "at least 10 days out" rule). */
   minDays?: number;
+  /** Restrict to open statuses (NEW/OPEN/AMENDED/CLOSING_SOON). */
+  openOnly?: boolean;
+  /** due_date >= this ISO timestamp. */
+  dueFrom?: string;
+  /** due_date <= this ISO timestamp. */
+  dueBefore?: string;
   sort?: "due_date" | "relevance" | "newest" | "score";
   limit?: number;
 }
+
+const OPEN_STATUSES = ["NEW", "OPEN", "AMENDED", "CLOSING_SOON"];
 
 const EMBED =
   "*, source:sources!opportunities_source_id_fkey(id,name,slug,state), " +
@@ -53,6 +61,9 @@ export async function listOpportunities(filters: OppFilters = {}): Promise<Oppor
   let q = sb.from("opportunities").select(EMBED);
 
   if (filters.status) q = q.eq("status", filters.status);
+  if (filters.openOnly) q = q.in("status", OPEN_STATUSES);
+  if (filters.dueFrom) q = q.gte("due_date", filters.dueFrom);
+  if (filters.dueBefore) q = q.lte("due_date", filters.dueBefore);
   if (filters.stage) q = q.eq("pipeline_stage", filters.stage);
   if (filters.sourceId) q = q.eq("source_id", filters.sourceId);
   if (filters.assignedTo) q = q.eq("assigned_to", filters.assignedTo);
