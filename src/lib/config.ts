@@ -12,7 +12,8 @@ function env(key: string, fallback = ""): string {
 export const config = {
   supabase: {
     url: env("NEXT_PUBLIC_SUPABASE_URL"),
-    anonKey: env("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    // Runtime DB key (server-only). All DB access is server-side; there is no browser
+    // Supabase client, so the anon key is never referenced and never shipped to the client.
     serviceRoleKey: env("SUPABASE_SERVICE_ROLE_KEY"),
   },
   llm: {
