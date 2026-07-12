@@ -18,12 +18,24 @@ Three engines:
 - **App:** https://pocu-wheat.vercel.app — gated by Basic Auth (any username, password `ajace-demo`)
 - **Vercel** runs the Next.js app, API routes, and the serverless crawlers; **Vercel Cron** hits
   `/api/cron` daily at 10:00 UTC (~6 AM ET, protected by `CRON_SECRET`).
-- **Supabase** (cloud) holds the Postgres + `pgvector` data; **OpenRouter** serves the LLM.
+- **Supabase** (cloud) holds the Postgres + `pgvector` data and the **`documents` Storage bucket**;
+  **OpenRouter** serves the LLM.
 - Nothing runs locally — the whole pipeline (discover → dedupe → draft → review → track) lives in the cloud.
 
-> Demo posture: the public URL is protected only by a shared password, and the database currently uses
-> the `anon` key with permissive RLS. For real production, set `SUPABASE_SERVICE_ROLE_KEY` to the
-> service_role secret, drop the `demo_all` RLS policies, and add per-user auth.
+### Document storage
+Solicitation documents are stored in a **private Supabase Storage bucket** (`documents`), not as base64
+in Postgres — keeping the database small (~45 MB) and queries fast regardless of how many documents are
+crawled. The DB keeps only metadata + extracted text; the file route (`/api/attachments/[id]/file`)
+streams bytes from Storage on demand. Per-file cap 40 MB.
+
+### Production-readiness checklist
+- ✅ Documents off the DB (Storage) — DB at ~9% of cap, pages sub-second
+- ✅ API role `statement_timeout` raised to 15 s; app functions have pinned `search_path`
+- ✅ Daily cron, full audit trail, notifications, deadline reminders
+- ⬜ **Provide the real `SUPABASE_SERVICE_ROLE_KEY`** (currently the app runs on the anon key, which
+  forces the permissive `demo_all` RLS policies). With it: drop the `demo_all` policies for true RLS.
+- ⬜ Add per-user auth (today: a shared Basic-Auth password) if multiple named users need distinct roles
+- ⬜ Isolate in a dedicated Supabase project (this one also hosts an unrelated app's `ts_*` objects)
 
 Redeploy with `vercel --prod`. On serverless, MA uses its reliable httpx page (Playwright stays off
 unless `PLAYWRIGHT_ENABLED=true`).
