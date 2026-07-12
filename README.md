@@ -32,8 +32,8 @@ streams bytes from Storage on demand. Per-file cap 40 MB.
 - ✅ Documents off the DB (Storage) — DB at ~9% of cap, pages sub-second
 - ✅ API role `statement_timeout` raised to 15 s; app functions have pinned `search_path`
 - ✅ Daily cron, full audit trail, notifications, deadline reminders
-- ⬜ **Provide the real `SUPABASE_SERVICE_ROLE_KEY`** (currently the app runs on the anon key, which
-  forces the permissive `demo_all` RLS policies). With it: drop the `demo_all` policies for true RLS.
+- ✅ **Database locked down** — every table's RLS requires a server-only `APP_DB_SECRET` header; the
+  public anon key alone returns nothing (verified). Strong site password + HTTP security headers.
 - ⬜ Add per-user auth (today: a shared Basic-Auth password) if multiple named users need distinct roles
 - ⬜ Isolate in a dedicated Supabase project (this one also hosts an unrelated app's `ts_*` objects)
 
