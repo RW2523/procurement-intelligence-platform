@@ -2,9 +2,10 @@ import { getServiceClient } from "@/lib/supabase/server";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Retryable transient DB errors (cold pooler connection tripping a short timeout). */
+/** Retryable transient errors — connection blips only. A statement timeout means the
+ *  query genuinely couldn't finish, so we fail fast rather than retry it 3×. */
 function isTransient(msg: string): boolean {
-  return /statement timeout|timeout|ECONNRESET|fetch failed|Connection terminated|57014/i.test(msg);
+  return /ECONNRESET|fetch failed|Connection terminated|ETIMEDOUT|socket hang up/i.test(msg);
 }
 
 /**
