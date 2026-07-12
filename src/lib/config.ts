@@ -15,6 +15,9 @@ export const config = {
     // Runtime DB key (server-only). All DB access is server-side; there is no browser
     // Supabase client, so the anon key is never referenced and never shipped to the client.
     serviceRoleKey: env("SUPABASE_SERVICE_ROLE_KEY"),
+    // Server-only secret required by every table's RLS policy (defence-in-depth: the
+    // public anon key alone can't read/write the DB without this header).
+    appDbSecret: env("APP_DB_SECRET"),
   },
   llm: {
     apiKey: env("OPENROUTER_API_KEY"),

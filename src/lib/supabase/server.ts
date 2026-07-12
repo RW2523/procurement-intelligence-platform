@@ -17,9 +17,14 @@ export function getServiceClient(): SupabaseClient {
     );
   }
   if (!_client) {
+    // RLS on every table requires the server-only x-app-secret header, so possessing
+    // the (public-tier) anon key alone grants no data access — the app is the only
+    // caller that sends the secret.
+    const headers: Record<string, string> = { "x-application-name": "procurement-intel" };
+    if (config.supabase.appDbSecret) headers["x-app-secret"] = config.supabase.appDbSecret;
     _client = createClient(config.supabase.url, config.supabase.serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
-      global: { headers: { "x-application-name": "procurement-intel" } },
+      global: { headers },
     });
   }
   return _client;
