@@ -15,7 +15,7 @@ Three engines:
 
 ## 🚀 Live deployment (entirely in the cloud)
 
-- **App:** https://pocu-wheat.vercel.app — gated by Basic Auth (any username, password `ajace-demo`)
+- **App:** https://pocu-wheat.vercel.app — gated by Basic Auth (any username; password is the `SITE_PASSWORD` Vercel env var)
 - **Vercel** runs the Next.js app, API routes, and the serverless crawlers; **Vercel Cron** hits
   `/api/cron` daily at 10:00 UTC (~6 AM ET, protected by `CRON_SECRET`).
 - **Supabase** (cloud) holds the Postgres + `pgvector` data and the **`documents` Storage bucket**;
@@ -85,11 +85,14 @@ NEXT_PUBLIC_SUPABASE_URL=https://coaszrosqlhifcwxurwu.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...
 
 # You add these:
-SUPABASE_SERVICE_ROLE_KEY=...   # Supabase dashboard → Project Settings → API → service_role secret
+SUPABASE_SERVICE_ROLE_KEY=...   # the DB key the server uses (RLS requires the app-secret header below)
+APP_DB_SECRET=...               # server-only secret every table's RLS policy requires (defence-in-depth)
 OPENROUTER_API_KEY=sk-or-...    # https://openrouter.ai/keys  (optional — blank = deterministic mock drafts)
+SITE_PASSWORD=...               # Basic-Auth gate for the deployed site (set on Vercel)
 ```
 
-> The server uses the **service_role** key (RLS is enabled on every table; the key never reaches the browser).
+> All DB access is server-side; RLS is enabled on every table and additionally requires the server-only
+> `APP_DB_SECRET` header, so the public anon key alone grants no access. Keys never reach the browser.
 > With no `OPENROUTER_API_KEY`, AI drafting still works via a deterministic mock engine (drafts are tagged
 > `model_used = mock-engine`); drop in a key later to switch to a live model — one config change.
 
