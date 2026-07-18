@@ -12,12 +12,16 @@ function env(key: string, fallback = ""): string {
 export const config = {
   supabase: {
     url: env("NEXT_PUBLIC_SUPABASE_URL"),
-    // Runtime DB key (server-only). All DB access is server-side; there is no browser
-    // Supabase client, so the anon key is never referenced and never shipped to the client.
+    // Publishable/anon key — browser-safe. Used ONLY for authentication (login + session
+    // via @supabase/ssr); data access is service-role. Its RLS-safe.
+    anonKey: env("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    // Runtime DB key (server-only). All DATA access is server-side via this key.
     serviceRoleKey: env("SUPABASE_SERVICE_ROLE_KEY"),
     // Server-only secret required by every table's RLS policy (defence-in-depth: the
     // public anon key alone can't read/write the DB without this header).
     appDbSecret: env("APP_DB_SECRET"),
+    // Parent domain (".ajace.com") to share the auth cookie across apps (SSO). Prod only.
+    cookieDomain: env("NEXT_PUBLIC_COOKIE_DOMAIN"),
   },
   llm: {
     apiKey: env("OPENROUTER_API_KEY"),
