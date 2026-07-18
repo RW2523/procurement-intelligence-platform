@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but DO track the documented template.
+!.env.example
 
 # local crawler recon artifacts (raw scraped HTML + ephemeral session tokens)
 /recon/

@@ -33,10 +33,50 @@ export function localEmbed(text: string): number[] {
   return v.map((x) => x / norm);
 }
 
-/** Returns an embedding for the text using the configured strategy (local default). */
+/**
+ * Provider embedding via an OpenAI-compatible endpoint (OpenRouter by default).
+ * Returns exactly EMBED_DIM values or throws — a dimension mismatch must fail loudly
+ * rather than silently corrupt the pgvector index with wrong-width rows.
+ */
+async function providerEmbed(text: string): Promise<number[]> {
+  const { apiKey, baseUrl, model } = config.embeddings;
+  const res = await fetch(`${baseUrl}/embeddings`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ model, input: text }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `embeddings failed: ${res.status} ${await res.text().catch(() => "")}`,
+    );
+  }
+  const json = (await res.json()) as { data?: { embedding: number[] }[] };
+  const vec = json.data?.[0]?.embedding;
+  if (!vec) throw new Error("embeddings response missing data[0].embedding");
+  if (vec.length !== EMBED_DIM) {
+    throw new Error(
+      `embedding dim mismatch: model "${model}" returned ${vec.length}, expected ${EMBED_DIM}. ` +
+        `Use a 1536-dim model (e.g. openai/text-embedding-3-small), or update EMBED_DIM ` +
+        `and the vector(${EMBED_DIM}) column together.`,
+    );
+  }
+  return vec;
+}
+
+/**
+ * Returns an embedding for the text. Uses the configured provider (OpenRouter /
+ * OpenAI-compatible) when an embeddings API key is set; otherwise the deterministic
+ * local hash embedder (no external call).
+ *
+ * NOTE: switching between provider and local — or between embedding models — means
+ * RE-EMBEDDING the whole corpus. Stored chunk vectors and query vectors must come from
+ * the same embedder, or similarity search returns garbage.
+ */
 export async function embed(text: string): Promise<number[]> {
-  // Provider embeddings could be wired here; local is the robust default.
-  void config;
+  if (config.embeddings.apiKey) return providerEmbed(text);
   return localEmbed(text);
 }
 

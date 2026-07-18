@@ -1,0 +1,26 @@
+name: Checks (procurement)
+
+# Typecheck + lint + the targeting golden-set suite. No DB needed (the golden
+# tests are pure). Vercel deploys via its Git integration once these pass.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Targeting golden-set tests
+        run: npx tsx scripts/test-targeting.mts

@@ -30,6 +30,15 @@ export const config = {
       return Boolean(env("OPENROUTER_API_KEY"));
     },
   },
+  embeddings: {
+    // OpenRouter now serves an OpenAI-compatible /embeddings endpoint, so the same
+    // OpenRouter key/gateway powers embeddings. Blank ⇒ the deterministic local hash
+    // embedder is used instead (no external call). Must stay a 1536-dim model to match
+    // the vector(1536) column + EMBED_DIM (e.g. openai/text-embedding-3-small).
+    apiKey: env("OPENROUTER_API_KEY"),
+    baseUrl: env("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+    model: env("EMBEDDING_MODEL", "openai/text-embedding-3-small"),
+  },
   crawl: {
     userAgent: env(
       "CRAWL_USER_AGENT",
