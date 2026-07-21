@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { getServiceClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/db/fetchAll";
 import type { OppStatus } from "@/lib/types";
@@ -45,7 +46,8 @@ interface StatRow {
  * page) and not a per-row count embed (correlated sub-queries, also slow). Scalar
  * columns only, no joins → a fast sequential scan.
  */
-export async function getDashboardStats(): Promise<DashboardStats> {
+export const getDashboardStats = unstable_cache(
+  async (): Promise<DashboardStats> => {
   const sb = getServiceClient();
   const now = Date.now();
   const soon = now + CLOSING_SOON_DAYS * 86_400_000;
@@ -125,4 +127,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     byState: [...stateMap.entries()].map(([state, count]) => ({ state, count })).sort((a, b) => b.count - a.count),
     pipelineValue,
   };
-}
+  },
+  ["procurement-dashboard-stats"],
+  { revalidate: 60, tags: ["opportunities"] },
+);
