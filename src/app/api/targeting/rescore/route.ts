@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceClient, dbConfigured } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/auth/guard";
 import { getTargetingProfile } from "@/lib/targeting/profile";
 import { scoreOpportunity } from "@/lib/targeting/engine";
 
@@ -14,6 +15,7 @@ export const maxDuration = 300;
  */
 export async function POST(req: NextRequest) {
   if (!dbConfigured) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+  try { await requireRole("admin"); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
   const body = await req.json().catch(() => ({}) as Record<string, unknown>);
   const batch = Math.min(Math.max(Number(body.batch) || 200, 10), 400);
   const sb = getServiceClient();

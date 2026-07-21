@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceClient, dbConfigured } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/auth/guard";
 import { getSourceBySlug } from "@/lib/crawl/runner";
 import { storeUploadedDocument } from "@/lib/crawl/attachments";
 import { classifyRelevanceLLM, buildProfileFromTargeting } from "@/lib/ai/relevance";
@@ -21,6 +22,7 @@ export const maxDuration = 120;
  */
 export async function POST(req: NextRequest) {
   if (!dbConfigured) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+  try { await requireRole("writer"); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
   const sb = getServiceClient();
 
   const form = await req.formData().catch(() => null);

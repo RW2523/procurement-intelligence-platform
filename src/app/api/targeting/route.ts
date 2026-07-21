@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbConfigured } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/auth/guard";
 import {
   getTargetingProfile,
   updateTargetingProfile,
@@ -19,6 +20,7 @@ export async function GET() {
 /** PUT { profile, note? } → persist an edited profile (audit-versioned). */
 export async function PUT(req: NextRequest) {
   if (!dbConfigured) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+  try { await requireRole("admin"); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
   const body = await req.json().catch(() => null);
   const profile = body?.profile as TargetingProfile | undefined;
   if (!profile || !Array.isArray(profile.capabilities) || !profile.thresholds || !profile.dateBands) {

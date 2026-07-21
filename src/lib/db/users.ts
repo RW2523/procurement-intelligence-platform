@@ -14,28 +14,28 @@ export async function getUserByEmail(email: string): Promise<User | null> {
   return (data as User) ?? null;
 }
 
-/**
- * The current user. Prefers the signed-in Supabase identity (SSO-aware) matched to a
- * `users` row by email; falls back to the seeded admin when there is no session (e.g.
- * SITE_PASSWORD transition mode) or no matching row (single-tenant).
- */
-export async function getCurrentUser(): Promise<User | null> {
+/** The signed-in Supabase identity's email, or null if there is no valid session. */
+export async function getSessionEmail(): Promise<string | null> {
   try {
     const auth = await createAuthServerClient();
     const {
       data: { user },
     } = await auth.auth.getUser();
-    const email = user?.email;
-    if (email) {
-      const byEmail = await getUserByEmail(email);
-      if (byEmail) return byEmail;
-    }
+    return user?.email ?? null;
   } catch {
-    // No session / auth not configured — fall through to the legacy default.
+    return null;
   }
-  const byEmail = await getUserByEmail("info@ajace.com");
-  if (byEmail) return byEmail;
-  const sb = getServiceClient();
-  const { data } = await sb.from("users").select("*").eq("role", "admin").limit(1).maybeSingle();
-  return (data as User) ?? null;
+}
+
+/**
+ * The current procurement user: the signed-in Supabase identity (SSO-aware) matched
+ * to a `users` row by email. Returns null when there is no session OR when the signed-in
+ * account has no procurement `users` row. It deliberately does NOT fall back to a seeded
+ * admin — a cross-app SSO user without a procurement account must be treated as
+ * unauthorized, not silently elevated (authorization is enforced in lib/auth/guard.ts).
+ */
+export async function getCurrentUser(): Promise<User | null> {
+  const email = await getSessionEmail();
+  if (!email) return null;
+  return await getUserByEmail(email);
 }

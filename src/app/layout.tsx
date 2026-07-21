@@ -35,7 +35,22 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               </div>
             )}
             <main className="flex-1 overflow-y-auto">
-              <div className="max-w-[1280px] mx-auto px-6 py-7">{children}</div>
+              <div className="max-w-[1280px] mx-auto px-6 py-7">
+                {shell.authed && !shell.user ? (
+                  <div className="max-w-lg mx-auto mt-16 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-8 text-center">
+                    <div className="flex justify-center mb-3 text-[var(--color-amber-700)]">
+                      <AlertTriangle size={28} />
+                    </div>
+                    <h1 className="text-lg font-semibold text-[var(--color-ink)]">Access restricted</h1>
+                    <p className="mt-2 text-[0.9rem] text-[var(--color-faint)]">
+                      Your AJACE login doesn&apos;t have a Procurement account. Ask an administrator to grant
+                      you access before you can view procurement data.
+                    </p>
+                  </div>
+                ) : (
+                  children
+                )}
+              </div>
             </main>
           </div>
         </div>
