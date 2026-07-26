@@ -333,16 +333,30 @@ create or replace function public.match_knowledge_chunks(
   match_count     integer default 8,
   min_similarity  double precision default 0.0
 )
+-- The column set is dictated by RetrievedChunk in src/lib/ai/rag.ts:4 —
+-- chunk_id, knowledge_id, title, outcome, content, similarity. My first
+-- reconstruction returned (id, knowledge_id, content, similarity), which does
+-- not error: the missing fields simply arrive as undefined, so the drafting
+-- prompt silently loses the past-proposal TITLE and its WON/LOST outcome. That
+-- outcome is the whole point of style-matched drafting — without it the model is
+-- shown examples with no idea which ones actually won.
 returns table (
-  id             uuid,
-  knowledge_id   uuid,
-  content        text,
-  similarity     double precision
+  chunk_id     uuid,
+  knowledge_id uuid,
+  title        text,
+  outcome      text,
+  content      text,
+  similarity   double precision
 )
 language sql stable as $$
-  select c.id, c.knowledge_id, c.content,
-         1 - (c.embedding <=> query_embedding) as similarity
+  select c.id                                   as chunk_id,
+         c.knowledge_id,
+         k.title,
+         coalesce(k.outcome, 'unknown')         as outcome,
+         c.content,
+         1 - (c.embedding <=> query_embedding)   as similarity
     from public.company_knowledge_chunks c
+    join public.company_knowledge k on k.id = c.knowledge_id
    where 1 - (c.embedding <=> query_embedding) >= min_similarity
    order by c.embedding <=> query_embedding
    limit greatest(1, match_count);

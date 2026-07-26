@@ -8,6 +8,13 @@
 -- =============================================================================
 
 insert into public.sources (name, slug, state, base_url, connector_type, connector_key, status, notes) values
+  -- REQUIRED by the "My Bids" feature: every manually-added bid is attached to
+  -- this row. Without it the page shows its empty state forever and "Add a bid"
+  -- fails, because getSourceBySlug('manual') returns null.
+  ('Manually added', 'manual', null,
+   'https://example.invalid/manual', 'custom', null, 'paused',
+   'Not a crawl target. Container for bids entered by hand (My Bids).'),
+
   ('SAM.gov (Federal)', 'sam', 'US',
    'https://sam.gov/', 'json_api', 'sam', 'active',
    'Federal contract opportunities. Requires SAM_GOV_API_KEY.'),

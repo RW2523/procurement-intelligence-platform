@@ -143,7 +143,7 @@ function assertPublicUrl(raw: string): URL {
 export async function fetchBuffer(
   url: string,
   opts: RequestOptions & { maxBytes?: number } = {},
-): Promise<{ buffer: Buffer; contentType: string; status: number; finalUrl: string; tooLarge?: boolean }> {
+): Promise<{ buffer: Buffer; contentType: string; status: number; finalUrl: string; tooLarge?: boolean; byteSize?: number }> {
   assertPublicUrl(url);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? config.crawl.requestTimeoutMs);
@@ -171,6 +171,55 @@ export async function fetchBuffer(
           signal: controller.signal,
         });
         if (opts.jar) opts.jar.ingest(res);
+        // REFUSE BEFORE ALLOCATING. The old code buffered the entire response and
+        // only then compared its length to the 40 MB cap — so the cap never
+        // bounded peak memory, it just decided what to do after the damage. On a
+        // 2 GB box with no swap, and Buffers being OFF-HEAP, one 300 MB state
+        // plan set goes straight at system RAM and the kernel OOM killer may
+        // pick the payroll app rather than this crawler.
+        const maxBytes = opts.maxBytes;
+        if (maxBytes) {
+          const declared = Number(res.headers.get("content-length") || 0);
+          if (declared > maxBytes) {
+            // Portals serving static documents almost always send Content-Length,
+            // so this header check alone removes most of the exposure.
+            await res.body?.cancel().catch(() => undefined);
+            return {
+              buffer: Buffer.alloc(0),
+              contentType: res.headers.get("content-type") ?? "application/octet-stream",
+              status: res.status,
+              finalUrl: res.url || url,
+              tooLarge: true,
+              byteSize: declared,
+            };
+          }
+          // Chunked / no Content-Length: count as it streams and abort at the cap.
+          if (!declared && res.body) {
+            const chunks: Uint8Array[] = [];
+            let total = 0;
+            for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+              total += chunk.byteLength;
+              if (total > maxBytes) {
+                controller.abort();
+                return {
+                  buffer: Buffer.alloc(0),
+                  contentType: res.headers.get("content-type") ?? "application/octet-stream",
+                  status: res.status,
+                  finalUrl: res.url || url,
+                  tooLarge: true,
+                  byteSize: total,
+                };
+              }
+              chunks.push(chunk);
+            }
+            return {
+              buffer: Buffer.concat(chunks),
+              contentType: res.headers.get("content-type") ?? "application/octet-stream",
+              status: res.status,
+              finalUrl: res.url || url,
+            };
+          }
+        }
         const buffer = Buffer.from(await res.arrayBuffer());
         return {
           buffer,

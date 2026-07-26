@@ -242,7 +242,39 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
     }
 
     // ── Reconciliation: items previously seen but absent this run ─────────────
+    //
+    // GUARD FIRST. This loop treats "absent from this fetch" as "closed on the
+    // portal", which is only sound if the fetch was a CREDIBLE full inventory.
+    // When a portal changes its HTML the connector returns HTTP 200 with zero
+    // rows and no error, which previously reconciled to: mark EVERY open
+    // opportunity for that state REMOVED, set closed_at, and log it — with no
+    // path back, because a later good crawl only re-opens rows it can still see.
+    // A partial page (pagination change, rate-limit, transient 200-with-fewer)
+    // does the same damage proportionally.
+    //
+    // So: never close anything on a suspiciously thin result. Requiring a
+    // majority of known items to reappear catches both the zero-row case and
+    // large partial truncations, while a genuinely shrinking portal still
+    // converges over subsequent runs.
+    const openBefore = [...existing.values()].filter(
+      (e) => !["CLOSED", "REMOVED", "AWARDED", "CANCELLED"].includes(e.status),
+    ).length;
+    const reappeared = [...existing.keys()].filter((k) => seen.has(k)).length;
+    const credible =
+      openBefore === 0 ||                       // nothing to lose
+      seen.size === 0 ? false : reappeared * 2 >= openBefore;
+
+    if (!credible) {
+      const msg =
+        `reconciliation SKIPPED: only ${reappeared} of ${openBefore} open item(s) reappeared ` +
+        `(fetched ${seen.size}). Treating this as an incomplete fetch, not a mass closure — ` +
+        `the portal's markup may have changed.`;
+      warnings.push(msg);
+      console.warn(`[crawl] ${source.slug}: ${msg}`);
+    }
+
     for (const [extId, ex] of existing) {
+      if (!credible) break;
       if (seen.has(extId)) continue;
       if (["CLOSED", "REMOVED", "AWARDED", "CANCELLED"].includes(ex.status)) continue;
       const pastDue = ex.due_date ? new Date(ex.due_date).getTime() < Date.now() : false;
