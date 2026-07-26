@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { FileUp, Loader2, Save, X } from "lucide-react";
 import { PIPELINE_STAGES } from "@/lib/types";
 import { PIPELINE_STYLES } from "@/lib/status";
+import { api } from "@/lib/apiPath";
 
 /** Convert a datetime-local / date input value to ISO (UTC) for the API. */
 function toISO(value: string): string {
@@ -46,7 +47,7 @@ export function UploadBidForm() {
     for (const f of files) fd.append("files", f);
 
     try {
-      const res = await fetch("/api/bids", { method: "POST", body: fd });
+      const res = await fetch(api("/api/bids"), { method: "POST", body: fd });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
       router.push(`/opportunities/${json.id}`);

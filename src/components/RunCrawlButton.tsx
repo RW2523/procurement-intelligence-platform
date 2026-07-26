@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw, Check, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/apiPath";
 
 interface Summary {
   sourceName: string;
@@ -34,7 +35,7 @@ export function RunCrawlButton({
     setResult(null);
     setError(null);
     try {
-      const res = await fetch("/api/crawl", {
+      const res = await fetch(api("/api/crawl"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(source ? { source } : {}),

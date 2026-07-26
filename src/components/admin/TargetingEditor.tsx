@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Save, Loader2, RefreshCw, FlaskConical } from "lucide-react";
 import type { TargetingProfile, ScoreBreakdownEntry } from "@/lib/types";
+import { api } from "@/lib/apiPath";
 
 /**
  * Structured editor for the five-dimension Targeting Profile. Lists are edited as
@@ -58,7 +59,7 @@ export function TargetingEditor({ initial }: { initial: TargetingProfile }) {
     setBusy("save");
     setMsg(null);
     try {
-      const res = await fetch("/api/targeting", {
+      const res = await fetch(api("/api/targeting"), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profile: p, note: "Edited in Admin → Targeting" }),
@@ -81,7 +82,7 @@ export function TargetingEditor({ initial }: { initial: TargetingProfile }) {
       let reset = true;
       let total = 0;
       for (let i = 0; i < 40; i++) {
-        const res = await fetch("/api/targeting/rescore", {
+        const res = await fetch(api("/api/targeting/rescore"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ batch: 300, reset }),
@@ -106,7 +107,7 @@ export function TargetingEditor({ initial }: { initial: TargetingProfile }) {
     setBusy("test");
     setTestResult(null);
     try {
-      const res = await fetch("/api/targeting/test", {
+      const res = await fetch(api("/api/targeting/test"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: testTitle, description: testDesc, profile: p }),

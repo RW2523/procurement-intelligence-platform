@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { Attachment } from "@/lib/types";
 import { Card, CardHeader, Badge } from "@/components/ui";
+import { api } from "@/lib/apiPath";
 
 const STATUS_STYLE: Record<string, { label: string; bg: string; fg: string }> = {
   parsed: { label: "Parsed", bg: "var(--color-mint-100)", fg: "var(--color-mint-700)" },
@@ -55,7 +56,7 @@ export function DocumentsPanel({
     if (textById[id] !== undefined) return;
     setLoadingText(true);
     try {
-      const res = await fetch(`/api/attachments/${id}/text`);
+      const res = await fetch(api(`/api/attachments/${id}/text`));
       const data = await res.json();
       setTextById((m) => ({ ...m, [id]: data.text ?? "" }));
     } finally {
@@ -70,7 +71,7 @@ export function DocumentsPanel({
     if (loading) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/opportunities/${opportunityId}/documents`, {
+      const res = await fetch(api(`/api/opportunities/${opportunityId}/documents`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ max: 10 }),
