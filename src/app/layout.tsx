@@ -29,8 +29,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               <div className="flex items-center gap-2 px-6 py-2.5 bg-[var(--color-amber-100)] text-[var(--color-amber-700)] text-[0.82rem] border-b border-[var(--color-border)]">
                 <AlertTriangle size={15} />
                 <span>
-                  Database not connected. Add <code className="font-mono">SUPABASE_SERVICE_ROLE_KEY</code> to{" "}
-                  <code className="font-mono">.env.local</code> and restart to enable live data.
+                  Database not connected. Set <code className="font-mono">DATABASE_URL</code> to the RDS
+                  endpoint and restart to enable live data.
                 </span>
               </div>
             )}

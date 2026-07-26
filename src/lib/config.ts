@@ -10,18 +10,10 @@ function env(key: string, fallback = ""): string {
 }
 
 export const config = {
-  supabase: {
-    url: env("NEXT_PUBLIC_SUPABASE_URL"),
-    // Publishable/anon key — browser-safe. Used ONLY for authentication (login + session
-    // via @supabase/ssr); data access is service-role. Its RLS-safe.
-    anonKey: env("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
-    // Runtime DB key (server-only). All DATA access is server-side via this key.
-    serviceRoleKey: env("SUPABASE_SERVICE_ROLE_KEY"),
-    // Server-only secret required by every table's RLS policy (defence-in-depth: the
-    // public anon key alone can't read/write the DB without this header).
-    appDbSecret: env("APP_DB_SECRET"),
-    // Parent domain (".ajace.com") to share the auth cookie across apps (SSO). Prod only.
-    cookieDomain: env("NEXT_PUBLIC_COOKIE_DOMAIN"),
+  db: {
+    // Amazon RDS. No Supabase: identity comes from the shared AJACE session
+    // (see lib/auth/session.ts) and data from lib/db/query.ts.
+    url: env("DATABASE_URL"),
   },
   llm: {
     apiKey: env("OPENROUTER_API_KEY"),
@@ -54,8 +46,7 @@ export const config = {
 
 export function assertServerConfig() {
   const missing: string[] = [];
-  if (!config.supabase.url) missing.push("NEXT_PUBLIC_SUPABASE_URL");
-  if (!config.supabase.serviceRoleKey) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+  if (!config.db.url) missing.push("DATABASE_URL");
   if (missing.length) {
     throw new Error(
       `Missing required environment variables: ${missing.join(", ")}. ` +
@@ -65,4 +56,4 @@ export function assertServerConfig() {
 }
 
 /** True when the Supabase service role key is present (DB is usable at runtime). */
-export const dbConfigured = Boolean(config.supabase.url && config.supabase.serviceRoleKey);
+export const dbConfigured = Boolean(config.db.url);
