@@ -314,23 +314,16 @@ create table if not exists public.targeting_profile_versions (
 );
 create index if not exists targeting_profile_versions_created_idx on public.targeting_profile_versions (created_at desc);
 
--- ---------- per-app profile (mirrors ts_profiles) -----------------------------
--- Procurement has a 4-tier role (viewer < writer < approver < admin) where the
--- timesheet has employee/admin, so it needs its own profile row. The app already
--- resolves identity to `users` BY EMAIL, so pi_users joins auth_users on email.
-create table if not exists public.pi_users (
-  id         uuid primary key references public.auth_users(id) on delete cascade,
-  email      text not null unique,
-  name       text not null default '',
-  role       text not null default 'viewer'
-             check (role in ('viewer','writer','approver','admin')),
-  is_active  boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
--- The email match in src/lib/db/users.ts is case-sensitive today, which silently
--- fails for anyone who types their address differently. Index the folded form.
-create unique index if not exists pi_users_email_lower_idx on public.pi_users (lower(email));
+-- ---------- procurement access ------------------------------------------------
+-- There is deliberately NO second profile table: `users` above IS the
+-- procurement profile, and every FK (opportunities.assigned_to,
+-- responses.created_by, …) already points at it. A person can therefore hold an
+-- AJACE login and still have NO procurement access — which is the intent.
+-- Grant access by inserting a row here with the role you want:
+--   insert into public.users (name, email, role)
+--   values ('Richard', 'richard@ajace.com', 'admin')
+--   on conflict (email) do update set role = excluded.role;
+create unique index if not exists users_email_lower_idx on public.users (lower(email));
 
 -- ---------- pgvector similarity search ---------------------------------------
 -- Reconstruction of the match_knowledge_chunks RPC the Knowledge Library calls.

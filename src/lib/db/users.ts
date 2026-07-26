@@ -1,5 +1,6 @@
 import { getServiceClient } from "@/lib/supabase/server";
-import { createAuthServerClient } from "@/lib/supabase/auth-server";
+import { readSession } from "@/lib/auth/session";
+import { sql } from "@/lib/db/pg";
 import type { User } from "@/lib/types";
 
 export async function listUsers(): Promise<User[]> {
@@ -10,21 +11,22 @@ export async function listUsers(): Promise<User[]> {
 
 export async function getUserByEmail(email: string): Promise<User | null> {
   const sb = getServiceClient();
-  const { data } = await sb.from("users").select("*").eq("email", email).maybeSingle();
+  const { data } = await sb.from("users").select("*").ilike("email", email).maybeSingle();
   return (data as User) ?? null;
 }
 
-/** The signed-in Supabase identity's email, or null if there is no valid session. */
+/** The signed-in identity's email (from the shared session), or null. */
 export async function getSessionEmail(): Promise<string | null> {
-  try {
-    const auth = await createAuthServerClient();
-    const {
-      data: { user },
-    } = await auth.auth.getUser();
-    return user?.email ?? null;
-  } catch {
-    return null;
-  }
+  const claims = await readSession();
+  if (!claims) return null;
+  // The session is stateless, so confirm the account still exists and that the
+  // token was not issued before a password reset / "sign out everywhere".
+  const rows = await sql<{ email: string }>(
+    `select u.email from public.auth_users u
+      where u.id = $1 and u.session_version = $2`,
+    [claims.id, claims.sv],
+  );
+  return rows[0]?.email ?? null;
 }
 
 /**

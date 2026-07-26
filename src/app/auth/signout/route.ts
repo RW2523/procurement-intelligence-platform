@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { createAuthServerClient } from "@/lib/supabase/auth-server";
 
-export const runtime = "nodejs";
-
-/** POST /auth/signout — ends the Supabase session and returns to the login page. */
-export async function POST(request: Request) {
-  const supabase = await createAuthServerClient();
-  await supabase.auth.signOut();
-  return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
+/**
+ * Signing out is owned by the app that issues the session (the timesheet app),
+ * because the cookie is shared: clearing it here would sign the person out of
+ * both, and only that app knows the correct cookie attributes to clear it with.
+ */
+export async function POST() {
+  const signOut = process.env.NEXT_PUBLIC_LOGOUT_URL;
+  return NextResponse.redirect(signOut || "/login", { status: 303 });
 }
