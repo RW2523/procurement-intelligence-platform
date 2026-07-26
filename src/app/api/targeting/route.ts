@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbConfigured } from "@/lib/supabase/server";
-import { requireRole } from "@/lib/auth/guard";
+import { requireRole, AuthError } from "@/lib/auth/guard";
 import {
   getTargetingProfile,
   updateTargetingProfile,
@@ -12,6 +12,11 @@ export const runtime = "nodejs";
 
 /** GET → the live targeting profile (with the seed defaults for reference). */
 export async function GET() {
+  // Reads need a procurement account too: the targeting profile is commercial
+  // strategy, and every AJACE login (including ~50 payroll employees) can reach
+  // this route otherwise — proxy.ts only proves a session exists, not membership.
+  try { await requireRole("viewer"); }
+  catch (e: unknown) { return NextResponse.json({ error: e instanceof AuthError ? e.message : "forbidden" }, { status: 403 }); }
   if (!dbConfigured) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   const profile = await getTargetingProfile();
   return NextResponse.json({ profile, defaults: DEFAULT_TARGETING_PROFILE });

@@ -109,10 +109,42 @@ export async function fetchJson<T = unknown>(url: string, opts: RequestOptions =
 }
 
 /** Fetch a URL as binary (for downloading attachment documents). */
+
+/**
+ * Block requests that would reach the instance itself or the private network.
+ *
+ * Attachment URLs are SCRAPED OUT OF REMOTE PORTAL HTML, so they are not
+ * operator-supplied: a hostile or compromised portal can point them anywhere.
+ * On EC2 the most valuable target is 169.254.169.254 — the instance metadata
+ * service — whose role holds this box's S3 and SES rights, and this box also
+ * runs payroll. Redirects are followed, so the check must run per-hop.
+ */
+const BLOCKED_HOSTS = new Set(["169.254.169.254", "metadata.google.internal", "localhost"]);
+function assertPublicUrl(raw: string): URL {
+  let u: URL;
+  try { u = new URL(raw); } catch { throw new Error(`invalid URL: ${raw}`); }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    throw new Error(`blocked scheme: ${u.protocol}`);
+  }
+  const h = u.hostname.toLowerCase();
+  if (BLOCKED_HOSTS.has(h) || h.endsWith(".localhost") || h === "0.0.0.0") {
+    throw new Error(`blocked host: ${h}`);
+  }
+  // Literal private/loopback/link-local ranges. Hostnames that RESOLVE into
+  // private space are not covered here — that needs a resolving agent — but the
+  // metadata endpoint and localhost are always literals in practice.
+  if (/^(127\.|10\.|169\.254\.|192\.168\.|::1$|\[?::1)/.test(h) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(h)) {
+    throw new Error(`blocked private address: ${h}`);
+  }
+  return u;
+}
+
 export async function fetchBuffer(
   url: string,
-  opts: RequestOptions = {},
-): Promise<{ buffer: Buffer; contentType: string; status: number; finalUrl: string }> {
+  opts: RequestOptions & { maxBytes?: number } = {},
+): Promise<{ buffer: Buffer; contentType: string; status: number; finalUrl: string; tooLarge?: boolean }> {
+  assertPublicUrl(url);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? config.crawl.requestTimeoutMs);
   if (opts.signal) {

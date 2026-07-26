@@ -10,9 +10,16 @@ export async function listUsers(): Promise<User[]> {
 }
 
 export async function getUserByEmail(email: string): Promise<User | null> {
-  const sb = getServiceClient();
-  const { data } = await sb.from("users").select("*").ilike("email", email).maybeSingle();
-  return (data as User) ?? null;
+  // EXACT match, never a pattern. This resolves a shared-session email to a
+  // procurement account and therefore to a ROLE, so `.ilike()` here made the
+  // session email a LIKE pattern: an address containing % or _ would match
+  // somebody else's row and inherit their role. Case-insensitivity comes from
+  // lower(email) — backed by users_email_lower_idx — not from a wildcard match.
+  const rows = await sql<User>(
+    `select * from public.users where lower(email) = lower($1) limit 1`,
+    [email],
+  );
+  return rows[0] ?? null;
 }
 
 /** The signed-in identity's email (from the shared session), or null. */
