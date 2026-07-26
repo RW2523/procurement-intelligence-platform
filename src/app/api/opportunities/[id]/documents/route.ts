@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceClient, dbConfigured } from "@/lib/supabase/server";
 import { fetchOpportunityDocuments } from "@/lib/crawl/attachments";
+import { requireRole, AuthError } from "@/lib/auth/guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -10,6 +11,11 @@ const SELECT =
 
 /** GET — list an opportunity's documents (metadata only, no bytes). */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // API routes bypass the layout gate, so they must check for a
+  // procurement account themselves.
+  try { await requireRole("writer"); }
+  catch (e) { return Response.json({ error: e instanceof AuthError ? e.message : "forbidden" }, { status: 403 }); }
+
   if (!dbConfigured) return NextResponse.json({ error: "DB not configured" }, { status: 503 });
   const { id } = await params;
   const sb = getServiceClient();
@@ -19,6 +25,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 /** POST — discover (if needed) + download + parse this opportunity's documents. */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // API routes bypass the layout gate, so they must check for a
+  // procurement account themselves.
+  try { await requireRole("writer"); }
+  catch (e) { return Response.json({ error: e instanceof AuthError ? e.message : "forbidden" }, { status: 403 }); }
+
   if (!dbConfigured) return NextResponse.json({ error: "DB not configured" }, { status: 503 });
   const { id } = await params;
   const body = await req.json().catch(() => ({}));

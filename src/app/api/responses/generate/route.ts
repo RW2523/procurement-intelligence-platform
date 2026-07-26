@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateResponseDraft } from "@/lib/ai/generate";
 import { dbConfigured } from "@/lib/supabase/server";
 import type { ResponseMode } from "@/lib/types";
+import { requireRole, AuthError } from "@/lib/auth/guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 /** POST { opportunityId, mode? } — generate one or both AI drafts. */
 export async function POST(req: NextRequest) {
+  // API routes bypass the layout gate, so they must check for a
+  // procurement account themselves.
+  try { await requireRole("writer"); }
+  catch (e) { return Response.json({ error: e instanceof AuthError ? e.message : "forbidden" }, { status: 403 }); }
+
   if (!dbConfigured) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   const { opportunityId, mode } = await req.json().catch(() => ({}));
   if (!opportunityId) return NextResponse.json({ error: "opportunityId required" }, { status: 400 });

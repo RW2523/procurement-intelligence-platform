@@ -3,6 +3,7 @@ import { dbConfigured } from "@/lib/supabase/server";
 import { getTargetingProfile } from "@/lib/targeting/profile";
 import { scoreOpportunity } from "@/lib/targeting/engine";
 import type { TargetingProfile } from "@/lib/types";
+import { requireRole, AuthError } from "@/lib/auth/guard";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,11 @@ export const runtime = "nodejs";
  * draft) profile. Powers the Admin "test the profile" sandbox.
  */
 export async function POST(req: NextRequest) {
+  // API routes bypass the layout gate, so they must check for a
+  // procurement account themselves.
+  try { await requireRole("viewer"); }
+  catch (e) { return Response.json({ error: e instanceof AuthError ? e.message : "forbidden" }, { status: 403 }); }
+
   if (!dbConfigured) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   const body = await req.json().catch(() => ({}) as Record<string, unknown>);
   if (!body.title || typeof body.title !== "string") {

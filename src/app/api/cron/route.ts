@@ -13,10 +13,15 @@ export const maxDuration = 300;
  */
 async function run(req: NextRequest) {
   if (!dbConfigured) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+  // FAIL CLOSED. This used to skip the check entirely when CRON_SECRET was
+  // unset, so a missing env var silently exposed the crawl trigger to anyone.
   const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!secret) {
+    console.error("[cron] refused: CRON_SECRET is not set");
+    return NextResponse.json({ error: "Cron is not configured" }, { status: 503 });
+  }
+  if (req.headers.get("authorization") !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const summaries = await runAllCrawls({ trigger: "scheduled" });
   const deadlines = await scanDeadlines();

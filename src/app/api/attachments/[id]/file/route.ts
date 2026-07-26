@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceClient, dbConfigured } from "@/lib/supabase/server";
 import { downloadDocument } from "@/lib/storage";
+import { requireRole, AuthError } from "@/lib/auth/guard";
 
 export const runtime = "nodejs";
 
 /** GET /api/attachments/:id/file[?download=1] — serve a stored document for preview/download.
  *  Bytes come from Supabase Storage; legacy base64 rows are still served if present. */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // API routes bypass the layout gate, so they must check for a
+  // procurement account themselves.
+  try { await requireRole("viewer"); }
+  catch (e) { return Response.json({ error: e instanceof AuthError ? e.message : "forbidden" }, { status: 403 }); }
+
   if (!dbConfigured) return NextResponse.json({ error: "DB not configured" }, { status: 503 });
   const { id } = await params;
   const sb = getServiceClient();

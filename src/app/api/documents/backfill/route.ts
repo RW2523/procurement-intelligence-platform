@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceClient, dbConfigured } from "@/lib/supabase/server";
 import { fetchOpportunityDocuments } from "@/lib/crawl/attachments";
+import { requireRole, AuthError } from "@/lib/auth/guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -12,6 +13,11 @@ export const maxDuration = 300;
  * many remain, so a caller can loop until `remaining` hits 0.
  */
 export async function POST(req: NextRequest) {
+  // API routes bypass the layout gate, so they must check for a
+  // procurement account themselves.
+  try { await requireRole("writer"); }
+  catch (e) { return Response.json({ error: e instanceof AuthError ? e.message : "forbidden" }, { status: 403 }); }
+
   if (!dbConfigured) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   const body = await req.json().catch(() => ({}) as Record<string, unknown>);
   const batch = Math.min(Math.max(Number(body.batch) || 4, 1), 10);

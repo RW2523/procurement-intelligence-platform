@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConnector } from "@/lib/connectors/registry";
+import { requireRole, AuthError } from "@/lib/auth/guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 /** Live connector smoke test — fetches a few real opportunities. No DB required. */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+  // API routes bypass the layout gate, so they must check for a
+  // procurement account themselves.
+  try { await requireRole("writer"); }
+  catch (e) { return Response.json({ error: e instanceof AuthError ? e.message : "forbidden" }, { status: 403 }); }
+
   const { slug } = await params;
   const limit = Number(new URL(req.url).searchParams.get("limit") ?? "5");
   const connector = getConnector(slug);
