@@ -7,8 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "crawl": "tsx scripts/crawl.mts",
-    "rescore": "node scripts/rescore.mjs",
+    "crawl": "tsx --conditions=react-server scripts/crawl.mts",
+    "rescore": "tsx --conditions=react-server scripts/rescore.mjs",
     "typecheck": "tsc --noEmit",
     "seed": "psql \"$DATABASE_URL\" -f deploy/db/seed-sources.sql"
   },
