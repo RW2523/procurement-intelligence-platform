@@ -46,6 +46,31 @@ const RELATIONS: Record<string, Record<string, Rel>> = {
   },
 };
 
+
+/**
+ * jsonb columns, which MUST be JSON.stringify'd before binding.
+ *
+ * node-pg encodes a JS object/array as a Postgres composite/array literal, which
+ * jsonb then rejects with "invalid input syntax for type json" — so every insert
+ * carrying one silently fails. This is not hypothetical: the first real crawl
+ * found 18 Texas/Mississippi opportunities and lost ALL of them to exactly this.
+ *
+ * The ARRAY columns below are the mirror image: they are text[], not jsonb, so
+ * they must stay RAW JS arrays. Stringifying them produces
+ * "malformed array literal". The two cases look identical in JS and must not be
+ * conflated — hence an explicit list rather than a type guess.
+ */
+const JSONB: Record<string, Set<string>> = {
+  opportunities:              new Set(["score_breakdown"]),
+  opportunity_versions:       new Set(["snapshot_json"]),
+  app_settings:               new Set(["value"]),
+  targeting_profile_versions: new Set(["profile"]),
+};
+// text[] — bind raw: company_knowledge.tags, opportunities.set_asides
+
+const encode = (table: string, col: string, v: unknown) =>
+  JSONB[table]?.has(col) && v !== null && v !== undefined ? JSON.stringify(v) : v;
+
 type Filter = { col: string; op: string; val: unknown; negate?: boolean };
 type Order = { col: string; ascending: boolean; nullsFirst?: boolean };
 
@@ -261,7 +286,7 @@ class Builder implements PromiseLike<{ data: any[]; error: Err; count?: number |
         if (!list.length) return { data: [], error: null };
         const cols = this.rowsToColumns(list);
         const tuples = list.map((row) =>
-          "(" + cols.map((c) => { p.push(row[c] ?? null); return `$${p.length}`; }).join(", ") + ")");
+          "(" + cols.map((c) => { p.push(encode(this.table, c, row[c] ?? null)); return `$${p.length}`; }).join(", ") + ")");
         let conflict = "";
         if (this.op === "upsert") {
           const keys = (this.onConflictCols || "id").split(",").map((s) => s.trim());
@@ -276,7 +301,7 @@ class Builder implements PromiseLike<{ data: any[]; error: Err; count?: number |
       } else if (this.op === "update") {
         const cols = Object.keys(this.values || {});
         if (!cols.length) return { data: [], error: null };
-        const sets = cols.map((c) => { p.push((this.values as any)[c]); return `${q(c)} = $${p.length}`; });
+        const sets = cols.map((c) => { p.push(encode(this.table, c, (this.values as any)[c])); return `${q(c)} = $${p.length}`; });
         const where = this.buildWhere(p);
         // A filterless UPDATE would rewrite the whole table. The app never
         // intends that; refuse rather than trust the caller.
