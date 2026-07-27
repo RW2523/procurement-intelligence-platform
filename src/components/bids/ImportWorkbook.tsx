@@ -30,6 +30,7 @@ interface RowPreview {
 interface Issue { row: number; level: "SKIP" | "WARN"; field: string; detail: string }
 interface Report {
   committed: boolean;
+  classified: boolean;
   fileName: string;
   pipeline: { sheet: string; headerRow: number; matched: number; total: number; missing: string[] } | null;
   forecast: { sheet: string; matched: number; total: number } | null;
@@ -44,6 +45,27 @@ interface Report {
   departments: Record<string, number>;
   rows: RowPreview[];
   issues: Issue[];
+}
+
+
+/**
+ * How many rows this import would actually write.
+ *
+ * `classified` is false when the server could not compare against the database,
+ * in which case the counts are all zero and mean "not determined" — NOT "nothing
+ * to do". Reading them as the latter is what once produced a confirm button
+ * labelled "Import 0 bids" for a workbook holding 71 rows.
+ */
+function writeCount(r: Report): number {
+  return r.classified ? r.counts.inserted + r.counts.updated : r.rows.length;
+}
+function nothingToDo(r: Report): boolean {
+  return r.classified && writeCount(r) === 0;
+}
+function importLabel(r: Report): string {
+  const n = writeCount(r);
+  if (nothingToDo(r)) return "Nothing to import";
+  return `Import ${n} bid${n === 1 ? "" : "s"}`;
 }
 
 export function ImportWorkbook() {
@@ -140,9 +162,14 @@ export function ImportWorkbook() {
             </div>
 
             <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))" }}>
-              <Stat label={report.committed ? "New bids added" : "Will be added"} value={report.counts.inserted} />
-              <Stat label={report.committed ? "Updated" : "Will be updated"} value={report.counts.updated} />
-              <Stat label="Already up to date" value={report.counts.unchanged} />
+              <Stat
+                label={report.committed ? "New bids added" : "Will be added"}
+                value={report.classified ? report.counts.inserted : report.rows.length}
+              />
+              {report.classified && (
+                <Stat label={report.committed ? "Updated" : "Will be updated"} value={report.counts.updated} />
+              )}
+              {report.classified && <Stat label="Already up to date" value={report.counts.unchanged} />}
               <Stat label="Forecast rows" value={report.counts.fInserted + report.counts.fUpdated} />
               {report.failures.length > 0 && <Stat label="Failed" value={report.failures.length} bad />}
             </div>
@@ -167,16 +194,15 @@ export function ImportWorkbook() {
                 <button
                   type="button"
                   className="btn btn-primary"
-                  disabled={busy !== ""}
+                  disabled={busy !== "" || nothingToDo(report)}
                   onClick={() => send(true)}
                 >
-                  {busy === "commit"
-                    ? "Importing…"
-                    : `Import ${report.counts.inserted + report.counts.updated} bid${
-                        report.counts.inserted + report.counts.updated === 1 ? "" : "s"}`}
+                  {busy === "commit" ? "Importing…" : importLabel(report)}
                 </button>
                 <span className="text-[0.82rem] text-[var(--color-muted)]">
-                  They appear in My&nbsp;Bids and on the pipeline board straight away.
+                  {nothingToDo(report)
+                    ? `All ${report.counts.unchanged} rows are already in My Bids and unchanged — there is nothing to write.`
+                    : "They appear in My Bids and on the pipeline board straight away."}
                 </span>
               </div>
             )}

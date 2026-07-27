@@ -254,8 +254,19 @@ async function main() {
     `, mapped ${opps.length}, skipped ${pipeRowsRead - opps.length}`);
   console.log(`  Forecast sheet   rows read ${fcstRowsRead}, mapped ${forecasts.length}, skipped ${fcstRowsRead - forecasts.length}`);
   if (DRY_RUN) {
-    console.log(`\n  DRY RUN — would write ${opps.length} opportunit${opps.length === 1 ? "y" : "ies"} ` +
-      `and ${forecasts.length} forecast row${forecasts.length === 1 ? "" : "s"}. Nothing was written.`);
+    if (applied.classified) {
+      // A database was reachable, so this is what WOULD change — not just how
+      // many rows the sheet holds. Saying "would write 71" when 71 are already
+      // present and identical is the kind of false report that gets believed.
+      console.log(`\n  DRY RUN — would ADD ${counts.inserted}, UPDATE ${counts.updated}, ` +
+        `leave ${counts.unchanged} unchanged` +
+        `  ·  forecast: add ${counts.fInserted}, update ${counts.fUpdated}, ` +
+        `leave ${counts.fUnchanged} unchanged. Nothing was written.`);
+    } else {
+      console.log(`\n  DRY RUN — mapped ${opps.length} opportunit${opps.length === 1 ? "y" : "ies"} ` +
+        `and ${forecasts.length} forecast row${forecasts.length === 1 ? "" : "s"}. No database was ` +
+        `reachable, so how many are NEW versus already present is unknown. Nothing was written.`);
+    }
   } else {
     console.log(`\n  opportunities            inserted ${counts.inserted}, updated ${counts.updated}, unchanged ${counts.unchanged}`);
     console.log(`  forecast_opportunities   inserted ${counts.fInserted}, updated ${counts.fUpdated}, unchanged ${counts.fUnchanged}`);

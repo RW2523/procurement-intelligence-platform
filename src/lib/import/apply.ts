@@ -34,6 +34,9 @@ export interface ApplyResult {
   failures: { row: number; error: string }[];
   ownerId: string | null;
   committed: boolean;
+  /** False when there was no database to compare against, so the counts are all
+   *  zero and mean "not determined" rather than "nothing to do". */
+  classified: boolean;
 }
 
 function engineSummary(e: EngineResult): string {
@@ -100,7 +103,21 @@ export async function applyMappedWorkbook(
   const failures: { row: number; error: string }[] = [];
   let ownerId: string | null = null;
 
-  if (commit) {
+  // Runs in BOTH modes. A dry run still resolves the source, the owner and
+  // every existing row, because that is the only way to answer "what would this
+  // change?" — the question the preview exists to answer. It was previously
+  // wrapped in `if (commit)`, so a preview reported 0 added / 0 updated /
+  // 0 unchanged for a workbook holding 71 rows, and the confirm button read
+  // "Import 0 bids". Only the INSERT/UPDATE statements below are gated now.
+  // ...but only when there IS a database. `npx tsx … --dry-run` with no
+  // DATABASE_URL is a supported way to check a workbook offline, and it must not
+  // try to open a connection. Callers get classified:false and should describe
+  // the outcome in terms of rows mapped rather than rows added.
+  if (!process.env.DATABASE_URL) {
+    return { counts, failures, ownerId: null, committed: false, classified: false };
+  }
+
+  {
     const { sql } = await import("@/lib/db/pg");
 
     const src = await sql<{ id: string }>(`select id from public.sources where slug = $1`, [sourceSlug]);
@@ -164,10 +181,12 @@ export async function applyMappedWorkbook(
                         "relevance_score", "relevance_reason", "relevance_method"];
           const vals = [...values, o.status, ownerId, ...engineValues(engine),
                         Math.min(100, engine.pursuitScore), engineSummary(engine), "engine"];
-          await sql(
-            `insert into public.opportunities (${cols.join(", ")}) values (${vals.map((_, i) => `$${i + 1}`).join(", ")})`,
-            vals,
-          );
+          if (commit) {
+            await sql(
+              `insert into public.opportunities (${cols.join(", ")}) values (${vals.map((_, i) => `$${i + 1}`).join(", ")})`,
+              vals,
+            );
+          }
           counts.inserted++;
         } else if (existing[0].content_hash === o.content_hash) {
           // Nothing in the sheet moved, so nothing is rewritten — including the
@@ -176,13 +195,15 @@ export async function applyMappedWorkbook(
         } else {
           const setCols = [...UPDATABLE, ...ENGINE_COLS];
           const setVals = [...UPDATABLE.map((c) => values[COLS.indexOf(c)]), ...engineValues(engine)];
-          await sql(
-            `update public.opportunities set ${setCols.map((c, i) => `${c} = $${i + 1}`).join(", ")},
-                    updated_at = now(), last_seen_at = now()
-               where id = $${setCols.length + 1}`,
-            [...setVals, existing[0].id],
-          );
-          if (existing[0].pipeline_stage !== o.pipeline_stage) {
+          if (commit) {
+            await sql(
+              `update public.opportunities set ${setCols.map((c, i) => `${c} = $${i + 1}`).join(", ")},
+                      updated_at = now(), last_seen_at = now()
+                 where id = $${setCols.length + 1}`,
+              [...setVals, existing[0].id],
+            );
+          }
+          if (commit && existing[0].pipeline_stage !== o.pipeline_stage) {
             await sql(
               `insert into public.opportunity_status_log (opportunity_id, field, old_value, new_value, changed_by, reason)
                values ($1, 'pipeline_stage', $2, $3, $4, 'Pipeline_2026.xlsx import')`,
@@ -208,13 +229,24 @@ export async function applyMappedWorkbook(
             );
         const vals = [f.date_found, f.department, f.sub_agency, f.title, f.detail_url, f.estimated_solicitation_date, f.set_asides];
         if (!found.length) {
-          await sql(
-            `insert into public.forecast_opportunities
-               (date_found, department, sub_agency, title, detail_url, estimated_solicitation_date, set_asides, created_by)
-             values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-            [...vals, ownerId],
-          );
+          if (commit) {
+            await sql(
+              `insert into public.forecast_opportunities
+                 (date_found, department, sub_agency, title, detail_url, estimated_solicitation_date, set_asides, created_by)
+               values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+              [...vals, ownerId],
+            );
+          }
           counts.fInserted++;
+        } else if (!commit) {
+          const r = await sql<{ changed: boolean }>(
+            `select true as changed from public.forecast_opportunities
+              where id = $8
+                and (date_found, department, sub_agency, title, detail_url, estimated_solicitation_date, set_asides)
+                    is distinct from ($1,$2,$3,$4,$5,$6,$7)`,
+            [...vals, found[0].id],
+          );
+          if (r.length) counts.fUpdated++; else counts.fUnchanged++;
         } else {
           const r = await sql<{ changed: boolean }>(
             `update public.forecast_opportunities
@@ -236,5 +268,5 @@ export async function applyMappedWorkbook(
     }
   }
 
-  return { counts, failures, ownerId, committed: commit };
+  return { counts, failures, ownerId, committed: commit, classified: true };
 }

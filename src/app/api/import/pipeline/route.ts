@@ -139,6 +139,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       committed: commit,
+      classified: applied.classified,
       fileName: file.name,
       sheets: mapped.sheetNames,
       pipeline: mapped.pipeline,
