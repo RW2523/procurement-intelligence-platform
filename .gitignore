@@ -54,3 +54,11 @@ next-env.d.ts
 # on the operator's machine is the source of truth, and the department tests
 # skip cleanly when the fixture is absent.
 scripts/fixtures/
+
+# build swap dirs used by ajace-timesheet-aws/deploy/scripts/install.sh:
+#   .next.build  where the new build is written (NEXT_DIST_DIR)
+#   .next.prev   the outgoing build, kept only between the two renames
+/.next.prev/
+/.next.build/
+.env.production
+.env.production.pre-https.*
