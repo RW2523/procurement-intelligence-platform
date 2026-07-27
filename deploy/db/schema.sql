@@ -605,6 +605,33 @@ select bootstrapped.email,
 -- ---------- pgvector similarity search ---------------------------------------
 -- Reconstruction of the match_knowledge_chunks RPC the Knowledge Library calls.
 -- Returns the most similar chunks by cosine distance.
+-- `create or replace function` CANNOT change a function's RETURN TYPE. The
+-- reconstruction below widened the returned row from (id, knowledge_id, content,
+-- similarity) to (chunk_id, knowledge_id, title, outcome, content, similarity),
+-- so on any database that already has the older function every deploy dies here
+-- with "cannot change return type of existing function" -- and because this sits
+-- ABOVE the \ir migration chain, the whole procurement schema step aborts and
+-- migration 001 never runs. That is exactly what happened on the live box.
+--
+-- Dropping by name rather than by a hardcoded signature: the argument list has
+-- changed once already, and `drop function if exists <exact signature>` silently
+-- does nothing when the existing overload differs -- which would reintroduce
+-- this same failure the next time the arguments move. Nothing depends on the
+-- function across the drop (it is called per request, never referenced by a
+-- view or constraint), so dropping and recreating is safe inside one deploy.
+do $$
+declare f record;
+begin
+  for f in
+    select oid::regprocedure as sig
+      from pg_proc
+     where proname = 'match_knowledge_chunks'
+       and pronamespace = 'public'::regnamespace
+  loop
+    execute format('drop function if exists %s', f.sig);
+  end loop;
+end $$;
+
 create or replace function public.match_knowledge_chunks(
   query_embedding vector(1536),
   match_count     integer default 8,
