@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Briefcase, Plus } from "lucide-react";
+import { Briefcase, Plus, FileSpreadsheet } from "lucide-react";
 import { dbConfigured } from "@/lib/supabase/server";
 import { pageGate } from "@/lib/auth/page-gate";
 import { getSourceBySlug } from "@/lib/crawl/runner";
@@ -37,9 +37,14 @@ export default async function MyBidsPage() {
         title="My Bids"
         subtitle="Bids already in your pipeline — uploaded by the team, tracked alongside crawled opportunities"
         actions={
-          <Link href="/my-bids/new" className="btn btn-primary">
-            <Plus size={15} /> Add a bid
-          </Link>
+          <>
+            <Link href="/my-bids/import" className="btn btn-ghost">
+              <FileSpreadsheet size={15} /> Import a spreadsheet
+            </Link>
+            <Link href="/my-bids/new" className="btn btn-primary">
+              <Plus size={15} /> Add a bid
+            </Link>
+          </>
         }
       />
       <Card>
@@ -56,8 +61,8 @@ export default async function MyBidsPage() {
             title="No bids uploaded yet"
             description="Add the bids your team is already working on — they get the same workspace, documents, AI drafts, and status tracking as crawled opportunities."
             action={
-              <Link href="/my-bids/new" className="btn btn-soft">
-                <Plus size={15} /> Add your first bid
+              <Link href="/my-bids/import" className="btn btn-soft">
+                <FileSpreadsheet size={15} /> Import from a spreadsheet
               </Link>
             }
           />
