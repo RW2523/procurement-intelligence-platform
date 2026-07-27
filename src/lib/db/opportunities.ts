@@ -10,9 +10,19 @@ import type {
 
 export interface OppFilters {
   q?: string;
+  /** USPS code, e.g. "NC". Case-insensitive — see the state block below. */
   state?: string;
   status?: string;
+  /** Pipeline stage (IDENTIFIED, QUALIFYING, … WON, LOST). */
   stage?: string;
+  /**
+   * Parent department code, applied in SQL against opportunities.department.
+   * The five PRIORITY codes ("DOT", "DOI", "DOE", "VA", "HHS") come from
+   * src/lib/departments.ts; the column deliberately has no CHECK constraint and
+   * also carries the non-priority codes the importer writes (DOJ, GSA, DOD…),
+   * so this is a plain equality on whatever is stored.
+   */
+  department?: string;
   sourceId?: string;
   relevanceMin?: number;
   assignedTo?: string;
@@ -25,6 +35,14 @@ export interface OppFilters {
   vehicle?: string;
   /** Minimum calendar days until due (the §10 "at least 10 days out" rule). */
   minDays?: number;
+  /**
+   * Exempt HAND-ENTERED rows (the 'manual' source) from the engine's triage
+   * gates — `bucket: "ACTIONABLE"` and `minDays`. See HAND_ENTERED_SLUG below
+   * for why the default shortlist has to do this. Off by default: a caller
+   * asking for one specific bucket is asking about engine output and must get
+   * engine output.
+   */
+  includeHandEntered?: boolean;
   /** Restrict to open statuses (NEW/OPEN/AMENDED/CLOSING_SOON). */
   openOnly?: boolean;
   /** due_date >= this ISO timestamp. */
@@ -36,6 +54,45 @@ export interface OppFilters {
 }
 
 const OPEN_STATUSES = ["NEW", "OPEN", "AMENDED", "CLOSING_SOON"];
+
+/**
+ * `sources.slug` of the pseudo-source every HAND-ENTERED row hangs off — the row
+ * seeded by deploy/db/seed-sources.sql, the one "My Bids" posts to
+ * (src/app/api/bids/route.ts) and the one scripts/import-pipeline-xlsx.mts loads
+ * the operator's workbook into.
+ *
+ * WHY THE DEFAULT LIST HAS TO KNOW ABOUT IT. `pursuit_bucket` is a TRIAGE verdict:
+ * its job is to cut thousands of crawled listings down to the handful worth a
+ * human's attention. That is the right gate for a row nobody has looked at. It is
+ * the wrong gate for a row a human TYPED IN — that row has already passed the only
+ * triage that matters, and the engine's opinion of it is commentary, not a
+ * gatekeeper. Scoring hand-entered rows (which the importer now does, so they
+ * carry a bucket, a score and an urgency like any crawled row) does NOT fix this
+ * on its own: measured over the operator's real 71-row workbook the engine tops
+ * out at 48 points against a captureReview threshold of 60, so every single row
+ * buckets IGNORE/MANUAL_REVIEW and the default page renders "0 opportunities".
+ * The operator then opens the department filter and sees nothing, which is the
+ * bug this exemption exists to fix.
+ */
+const HAND_ENTERED_SLUG = "manual";
+
+/**
+ * The 'manual' source id, or null when the caller did not ask for the exemption
+ * (or the seed row is missing). Resolved to an id up front for the same reason
+ * the state block below does it: the builder cannot filter on an embedded
+ * resource, so `source.slug` has to become `source_id`.
+ */
+async function handEnteredSourceId(
+  sb: ReturnType<typeof getServiceClient>,
+  wanted: boolean,
+): Promise<string | null> {
+  if (!wanted) return null;
+  const { data } = await sb.from("sources").select("id").eq("slug", HAND_ENTERED_SLUG).maybeSingle();
+  const id = (data as { id?: string } | null)?.id ?? null;
+  // or() builds a parsed expression string, so only a uuid-shaped value is ever
+  // interpolated into it — same rule as the source ids in the state block.
+  return id && /^[0-9a-fA-F-]{36}$/.test(id) ? id : null;
+}
 
 const EMBED =
   "*, source:sources!opportunities_source_id_fkey(id,name,slug,state), " +
@@ -65,21 +122,88 @@ export async function listOpportunities(filters: OppFilters = {}): Promise<Oppor
   if (filters.dueFrom) q = q.gte("due_date", filters.dueFrom);
   if (filters.dueBefore) q = q.lte("due_date", filters.dueBefore);
   if (filters.stage) q = q.eq("pipeline_stage", filters.stage);
+  if (filters.department) q = q.eq("department", filters.department);
   if (filters.sourceId) q = q.eq("source_id", filters.sourceId);
   if (filters.assignedTo) q = q.eq("assigned_to", filters.assignedTo);
   if (filters.relevanceMin != null) q = q.gte("relevance_score", filters.relevanceMin);
-  if (filters.bucket === "ACTIONABLE") q = q.in("pursuit_bucket", ["PURSUE", "CAPTURE_REVIEW"]);
-  else if (filters.bucket === "INSUFFICIENT_TIME") q = q.eq("urgency", "INSUFFICIENT_TIME");
+  // Hand-entered rows skip the two triage gates below. Each gate is ONE or()
+  // group and separate or() groups are AND-ed, so the escape term has to appear
+  // in every gate it should open — a row that clears the bucket gate but not the
+  // date gate is still filtered out.
+  const handEntered = await handEnteredSourceId(sb, filters.includeHandEntered === true);
+  const escape = handEntered ? [`source_id.eq.${handEntered}`] : [];
+
+  if (filters.bucket === "ACTIONABLE") {
+    // Written as eq terms rather than in(): or() has to carry the escape term
+    // and the builder's OR grammar takes only comparison operators.
+    q = q.or(["pursuit_bucket.eq.PURSUE", "pursuit_bucket.eq.CAPTURE_REVIEW", ...escape].join(","));
+  } else if (filters.bucket === "INSUFFICIENT_TIME") q = q.eq("urgency", "INSUFFICIENT_TIME");
   else if (filters.bucket) q = q.eq("pursuit_bucket", filters.bucket);
   if (filters.urgency) q = q.eq("urgency", filters.urgency);
   if (filters.setAside === "ANY") q = q.neq("set_asides", "{}");
   if (filters.vehicle === "ANY") q = q.not("contract_vehicle", "is", null);
   else if (filters.vehicle) q = q.eq("contract_vehicle", filters.vehicle);
+  // ── minDays ──────────────────────────────────────────────────────────────
+  // §10: don't show work there is provably not enough time to bid. This used to
+  // be a bare `due_date >= cutoff`, and that is a NULL trap: for a row with no
+  // due date the comparison is NULL, NULL is not TRUE, and the row silently
+  // vanished. Four of the operator's 71 hand-typed rows have no parseable
+  // deadline and disappeared exactly this way.
+  //
+  // THE DECISION: a row with NO due date is INCLUDED.
+  //   · minDays excludes what is provably too late. "No deadline recorded" is not
+  //     proof of anything — it is missing information, and the two are different
+  //     facts. The engine already models them as different facts: urgency
+  //     INSUFFICIENT_TIME vs NO_DATE are separate bands (src/lib/targeting/engine.ts
+  //     urgencyFor()). The filter should not collapse them.
+  //   · The failure modes are not symmetric. Showing a row whose deadline nobody
+  //     has found yet costs the operator one glance and gives them the chance to
+  //     go and find it; hiding it costs the bid, silently, with no UI anywhere
+  //     that would reveal the row was suppressed.
+  //   · So it is spelled out as an explicit disjunct rather than left to fall out
+  //     of three-valued logic in either direction.
+  //
+  // `urgency = 'NO_DATE'` is the disjunct, not `due_date is null`, because the
+  // builder's OR grammar has no null test. It is a faithful stand-in and not a
+  // second source of truth: urgency is written by the same engine pass that
+  // writes pursuit_bucket, from the same due_date, and it is NOT NULL for every
+  // scored row — and an unscored row has no bucket, so it never reaches here
+  // through the ACTIONABLE/PURSUE/CAPTURE_REVIEW views that pass minDays. Nor
+  // can it go stale the way a cached day-count would: "this row has no deadline"
+  // stops being true only when a deadline is added, and both the crawler
+  // (AMENDED update) and the rescore route rewrite urgency when that happens.
   if (filters.minDays != null) {
     const cutoff = new Date(Date.now() + filters.minDays * 86_400_000).toISOString();
-    q = q.gte("due_date", cutoff);
+    q = q.or([`due_date.gte.${cutoff}`, "urgency.eq.NO_DATE", ...escape].join(","));
   }
-  // (state is filtered in JS below — it lives on the embedded `source` resource)
+  // ── State ────────────────────────────────────────────────────────────────
+  // Now applied IN SQL, and case-insensitively, replacing a JS post-filter.
+  //
+  // Two bugs were fixed here at once:
+  //  1. The post-filter ran AFTER `q.limit()`, so "?state=MA" returned only the
+  //     MA rows that happened to land in the global top-N by pursuit_score. If
+  //     MA's opportunities all scored below the cut, the page looked empty even
+  //     though matching rows existed — and the count badge under-reported.
+  //  2. It compared with `===`. Every seeded source stores an UPPERCASE state,
+  //     but createSource() writes AddSourceForm's free-text box verbatim, so a
+  //     hand-added "nc" was invisible to the "NC" option. ilike fixes that
+  //     without needing a data migration.
+  //
+  // State lives in two places and a row may use either: `sources.state` for
+  // crawled rows, and `opportunities.state` for hand-entered ones (the 'manual'
+  // source is seeded with state = null, so typed-in rows had no state at all).
+  // The query builder cannot filter on an embedded resource, so the source side
+  // is resolved to ids first and OR'd in.
+  const stateCode = filters.state?.replace(/[^A-Za-z]/g, "") ?? "";
+  if (stateCode) {
+    const { data: srcRows } = await sb.from("sources").select("id").ilike("state", stateCode);
+    const srcIds = ((srcRows ?? []) as { id: string }[])
+      .map((s) => s.id)
+      // The or() expression is a parsed string, so only bind values that cannot
+      // disturb it. Anything not uuid-shaped is dropped rather than trusted.
+      .filter((id) => /^[0-9a-fA-F-]{36}$/.test(id));
+    q = q.or([`state.ilike.${stateCode}`, ...srcIds.map((id) => `source_id.eq.${id}`)].join(","));
+  }
   if (filters.q) {
     const term = filters.q.replace(/[%,]/g, " ");
     q = q.or(`title.ilike.%${term}%,agency.ilike.%${term}%,external_id.ilike.%${term}%`);
@@ -94,8 +218,7 @@ export async function listOpportunities(filters: OppFilters = {}): Promise<Oppor
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   let rows = ((data ?? []) as unknown as Record<string, unknown>[]).map(shape);
-  // state filter on embedded resource can return nulls; drop rows whose source filtered out
-  if (filters.state) rows = rows.filter((r) => r.source?.state === filters.state);
+  // (state is now filtered in SQL above — see the note there)
   // specific set-aside labels are prefix-matched against the detected array
   if (filters.setAside && filters.setAside !== "ANY") {
     rows = rows.filter((r) => r.set_asides?.some((s) => s.startsWith(filters.setAside!)));

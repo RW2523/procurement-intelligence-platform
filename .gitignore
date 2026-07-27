@@ -44,3 +44,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Test fixtures generated from the user's real Pipeline workbook.
+# pipeline-2026-rows.json is a verbatim capture of the "Agency/POC" cells and
+# therefore holds 53 real government contact email addresses and 24 phone
+# numbers belonging to named procurement officers. That is other people's
+# personal data: it must not enter git history, where deleting it later does
+# not remove it. Regenerate locally from the workbook instead — the spreadsheet
+# on the operator's machine is the source of truth, and the department tests
+# skip cleanly when the fixture is absent.
+scripts/fixtures/

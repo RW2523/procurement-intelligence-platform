@@ -1,6 +1,12 @@
 import { getServiceClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/db/fetchAll";
-import { PIPELINE_STAGES, type PipelineStage } from "@/lib/types";
+import {
+  IN_FLIGHT_STAGES,
+  PIPELINE_STAGES,
+  isDecidedStage,
+  isInFlightStage,
+  type PipelineStage,
+} from "@/lib/types";
 
 export interface Analytics {
   byStage: { stage: PipelineStage; count: number }[];
@@ -8,6 +14,12 @@ export interface Analytics {
   winRate: number | null;
   won: number;
   lost: number;
+  /**
+   * Bids AWAITING an agency decision — Submitted + Orals + BAFO. Deliberately
+   * excludes Won/Lost, so it pairs with `won`/`lost` as a disjoint bucket.
+   * NOT the same as `DashboardStats.submitted`, which is cumulative ("ever
+   * sent", Won/Lost included).
+   */
   submitted: number;
   avgRelevance: number | null;
   byState: { state: string; open: number; total: number }[];
@@ -98,8 +110,11 @@ export async function getAnalytics(): Promise<Analytics> {
     // exclusion counts by §8 group — excluded_reason format: "<keyword> (<Group>)"
     const exGroup = /\(([^)]+)\)\s*$/.exec((o.excluded_reason as string | null) ?? "")?.[1];
     if (exGroup) exclusions.set(exGroup, (exclusions.get(exGroup) ?? 0) + 1);
-    // outcomes by bucket
-    if (bucket && (stage === "WON" || stage === "LOST" || stage === "SUBMITTED")) {
+    // Outcomes by bucket. `submitted` here means "out the door, still waiting" —
+    // that is every IN_FLIGHT stage (Submitted, Orals, BAFO), not just SUBMITTED.
+    // Testing `stage === "SUBMITTED"` dropped Orals/BAFO rows out of this table
+    // and out of the bucket totals entirely.
+    if (bucket && (isDecidedStage(stage) || isInFlightStage(stage))) {
       const e = winBucket.get(bucket) ?? { won: 0, lost: 0, submitted: 0 };
       if (stage === "WON") e.won++;
       else if (stage === "LOST") e.lost++;
@@ -113,7 +128,10 @@ export async function getAnalytics(): Promise<Analytics> {
 
   const won = stageCount.get("WON") ?? 0;
   const lost = stageCount.get("LOST") ?? 0;
-  const submitted = stageCount.get("SUBMITTED") ?? 0;
+  // Bids awaiting an agency decision: Submitted + Orals + BAFO. Orals and BAFO
+  // are post-submission rounds, so counting only SUBMITTED under-reports the
+  // moment a bid advances.
+  const submitted = IN_FLIGHT_STAGES.reduce((n, s) => n + (stageCount.get(s) ?? 0), 0);
   const decided = won + lost;
 
   const runRows = runs ?? [];

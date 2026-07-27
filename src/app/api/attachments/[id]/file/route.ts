@@ -72,7 +72,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       // Defence in depth: stop MIME sniffing and neutralise anything that
       // still manages to be interpreted as a document.
       "X-Content-Type-Options": "nosniff",
-      "Content-Security-Policy": "default-src 'none'; sandbox",
+      // This handler is the SINGLE source of truth for this response's CSP —
+      // next.config.ts must not set one for this path, because a config CSP is
+      // applied before the handler runs and send-response.js then drops the
+      // handler's CSP rather than merging it (see the note in next.config.ts).
+      // `frame-ancestors 'self'` is what actually permits DocumentsPanel to
+      // <iframe> this endpoint; browsers that honour it ignore X-Frame-Options
+      // entirely, and older ones fall back to the SAMEORIGIN set in next.config.
+      "Content-Security-Policy": "default-src 'none'; sandbox; frame-ancestors 'self'",
       "Cache-Control": "private, max-age=3600",
     },
   });

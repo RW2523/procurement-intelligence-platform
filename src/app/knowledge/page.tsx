@@ -1,5 +1,6 @@
 import { BookOpen, Layers } from "lucide-react";
 import { dbConfigured } from "@/lib/supabase/server";
+import { pageGate } from "@/lib/auth/page-gate";
 import { listKnowledge } from "@/lib/db/knowledge";
 import { Card, CardHeader, PageHeader, Badge, EmptyState } from "@/components/ui";
 import { KnowledgeForm } from "@/components/knowledge/KnowledgeForm";
@@ -24,6 +25,8 @@ export default async function KnowledgePage() {
       </>
     );
   }
+  const { deny } = await pageGate();
+  if (deny) return deny;
   const docs = await listKnowledge();
   const totalChunks = docs.reduce((s, d) => s + d.chunk_count, 0);
 

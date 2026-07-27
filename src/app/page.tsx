@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Inbox, Sparkles, Clock, Target, FileText, Radar, ArrowRight } from "lucide-react";
 import { dbConfigured } from "@/lib/supabase/server";
+import { pageGate } from "@/lib/auth/page-gate";
 import { getDashboardStats } from "@/lib/db/dashboard";
 import { listOpportunities } from "@/lib/db/opportunities";
 import { listSourceHealth } from "@/lib/db/sources";
@@ -22,6 +23,10 @@ export default async function DashboardPage() {
       </>
     );
   }
+  // The page's own authorization check. The root layout's is skipped on
+  // client-side navigation, so it cannot be the only one — see lib/auth/page-gate.tsx.
+  const { deny } = await pageGate();
+  if (deny) return deny;
 
   const nowIso = new Date().toISOString();
   const soonIso = new Date(Date.now() + 7 * 86_400_000).toISOString();

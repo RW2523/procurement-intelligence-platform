@@ -1,7 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { getServiceClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/db/fetchAll";
-import type { OppStatus } from "@/lib/types";
+import { isSubmittedStage, type OppStatus } from "@/lib/types";
 
 export interface DashboardStats {
   totalOpps: number;
@@ -16,6 +16,12 @@ export interface DashboardStats {
   urgencyDist: { band: string; label: string; count: number; color: string }[];
   closingSoon: number;
   amended: number;
+  /**
+   * Cumulative: bids we have actually sent — every stage from Submitted onward
+   * (Orals, BAFO, Won, Lost included), not just the Submitted column.
+   * NOT the same as `Analytics.submitted`, which counts only bids still
+   * awaiting a decision.
+   */
   submitted: number;
   won: number;
   totalResponses: number;
@@ -83,7 +89,10 @@ export const getDashboardStats = unstable_cache(
     if (o.status === "NEW") newCount++;
     if (o.status === "NEW" && (o.relevance_score ?? 0) >= 70) relevantNew++;
     if (o.status === "AMENDED") amended++;
-    if (o.pipeline_stage === "SUBMITTED") submitted++;
+    // Cumulative submissions, not "sitting in the SUBMITTED column": Orals, BAFO,
+    // Won and Lost all imply the bid went out. `won` stays an equality test —
+    // WON is genuinely terminal.
+    if (isSubmittedStage(o.pipeline_stage)) submitted++;
     if (o.pipeline_stage === "WON") won++;
 
     const actionable = open && o.urgency !== "INSUFFICIENT_TIME";

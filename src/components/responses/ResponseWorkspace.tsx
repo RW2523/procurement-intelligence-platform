@@ -20,6 +20,7 @@ import { Markdown } from "@/components/Markdown";
 import { Badge } from "@/components/ui";
 import { RESPONSE_STATUS_STYLES } from "@/lib/status";
 import { fmtDateTime, cn } from "@/lib/utils";
+import { api } from "@/lib/apiPath";
 import type { ResponseDraft, ResponseRevision, ResponseMode } from "@/lib/types";
 import {
   generateDraftAction,
@@ -189,7 +190,7 @@ function DraftEditor({
               {action === "save" ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save
             </button>
           )}
-          <a className="btn btn-ghost btn-sm" href={`/api/responses/${response.id}/export`}>
+          <a className="btn btn-ghost btn-sm" href={api(`/api/responses/${response.id}/export`)}>
             <Download size={13} /> Word
           </a>
           <button

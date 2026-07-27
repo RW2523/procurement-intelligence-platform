@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { dbConfigured } from "@/lib/supabase/server";
+import { can } from "@/lib/auth/guard";
+import { getCurrentUser } from "@/lib/db/users";
 import { getTargetingProfile } from "@/lib/targeting/profile";
 import { PageHeader } from "@/components/ui";
+import { AdminOnly } from "@/components/AdminOnly";
 import { TargetingEditor } from "@/components/admin/TargetingEditor";
 import { SetupNotice } from "@/components/SetupNotice";
 
@@ -17,6 +20,11 @@ export default async function TargetingPage() {
       </>
     );
   }
+  // Same gate as /admin and /admin/access — the editor's save action is
+  // admin-only, so the screen behind it should be too.
+  const me = await getCurrentUser();
+  if (!me || !can(me, "admin")) return <AdminOnly user={me} />;
+
   const profile = await getTargetingProfile();
   return (
     <>

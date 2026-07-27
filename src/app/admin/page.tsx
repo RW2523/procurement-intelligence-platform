@@ -1,6 +1,10 @@
-import { Users, Building2, Bot, Target, Bell } from "lucide-react";
+import Link from "next/link";
+import { Users, Building2, Bot, Target, Bell, KeyRound } from "lucide-react";
 import { dbConfigured } from "@/lib/supabase/server";
 import { config } from "@/lib/config";
+import { can } from "@/lib/auth/guard";
+import { getCurrentUser } from "@/lib/db/users";
+import { AdminOnly } from "@/components/AdminOnly";
 import {
   getAISettings,
   getCompanySettings,
@@ -36,6 +40,14 @@ export default async function AdminPage() {
       </>
     );
   }
+  // This screen edits AI keys, scoring thresholds and the user list, and every
+  // form on it posts to an action that already demands admin — but the page
+  // itself used to render for any signed-in procurement user, handing viewers a
+  // full read of settings and the staff roster. Gate it the same way
+  // /admin/access does: check, then render a refusal rather than throwing.
+  const me = await getCurrentUser();
+  if (!me || !can(me, "admin")) return <AdminOnly user={me} />;
+
   const [ai, company, relevance, notifications, users] = await Promise.all([
     getAISettings(),
     getCompanySettings(),
@@ -59,10 +71,13 @@ export default async function AdminPage() {
         </Card>
 
         <Card>
+          {/* These two use <Link>, not <a>. Next rewrites Link hrefs for the
+              /procurement basePath; a bare <a href="/admin/..."> does not get
+              rewritten and escapes to the site root (the timesheet app), 404ing. */}
           <CardHeader
             title={<span className="flex items-center gap-2"><Target size={16} /> Targeting profile</span>}
             subtitle="The five-dimension search engine: capabilities, vehicles, set-asides, agencies, exclusions, weights & thresholds"
-            action={<a href="/admin/targeting" className="btn btn-primary btn-sm">Open editor</a>}
+            action={<Link href="/admin/targeting" className="btn btn-primary btn-sm">Open editor</Link>}
           />
           <div className="p-5 text-[0.83rem] text-[var(--color-muted)]">
             The weighted targeting engine scores every crawled and uploaded opportunity
@@ -80,6 +95,20 @@ export default async function AdminPage() {
         <Card>
           <CardHeader title={<span className="flex items-center gap-2"><Bell size={16} /> Notifications</span>} subtitle="Deadline & Q&A reminder windows" />
           <div className="p-5"><NotificationForm initial={notifications} /></div>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader
+            title={<span className="flex items-center gap-2"><KeyRound size={16} /> Access & roles</span>}
+            subtitle="Grant or revoke Procurement access for anyone with an AJACE login, change roles, and deactivate accounts"
+            action={<Link href="/admin/access" className="btn btn-primary btn-sm">Manage access</Link>}
+          />
+          <div className="p-5 text-[0.83rem] text-[var(--color-muted)]">
+            One AJACE login covers the timesheet and this app, but Procurement needs a role on top of it —
+            that is why someone can sign in and still land on “You don&apos;t have access”. Grant it here, or
+            from the server with <code className="font-mono text-[0.78rem]">npm run access -- grant name@ajace.com --role writer --yes</code>.
+            Every change is audited.
+          </div>
         </Card>
 
         <Card className="lg:col-span-2">

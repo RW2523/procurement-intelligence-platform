@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { pageGate } from "@/lib/auth/page-gate";
 import { PageHeader } from "@/components/ui";
 import { AddSourceForm } from "@/components/sources/AddSourceForm";
 
-export default function NewSourcePage() {
+export default async function NewSourcePage() {
+  const { deny } = await pageGate();
+  if (deny) return deny;
   return (
     <>
       <Link href="/sources" className="inline-flex items-center gap-1.5 text-[0.82rem] text-[var(--color-muted)] hover:text-[var(--color-ink)] mb-3">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Briefcase, Plus } from "lucide-react";
 import { dbConfigured } from "@/lib/supabase/server";
+import { pageGate } from "@/lib/auth/page-gate";
 import { getSourceBySlug } from "@/lib/crawl/runner";
 import { listOpportunities } from "@/lib/db/opportunities";
 import { Card, PageHeader, EmptyState } from "@/components/ui";
@@ -22,6 +23,8 @@ export default async function MyBidsPage() {
       </>
     );
   }
+  const { deny } = await pageGate();
+  if (deny) return deny;
 
   const source = await getSourceBySlug("manual");
   const bids = source

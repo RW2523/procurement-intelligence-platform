@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Paperclip, FileText, Award } from "lucide-react";
 import type { OpportunityView } from "@/lib/types";
-import { OPP_STATUS_STYLES, BID_REC_STYLES, BUCKET_STYLES, URGENCY_STYLES } from "@/lib/status";
+import { OPP_STATUS_STYLES, BID_REC_STYLES, BUCKET_STYLES, URGENCY_STYLES, pipelineStyle } from "@/lib/status";
 import { Badge } from "@/components/ui";
 import { fmtDate, deadlineLabel, daysUntil } from "@/lib/utils";
 
@@ -12,7 +12,9 @@ export function OpportunityTable({ opps, dense = false }: { opps: OpportunityVie
         <thead>
           <tr className="text-left text-[0.7rem] uppercase tracking-wide text-[var(--color-faint)] border-b border-[var(--color-border)]">
             <th className="py-2.5 px-4 font-semibold">Opportunity</th>
+            {!dense && <th className="py-2.5 px-3 font-semibold">Department</th>}
             {!dense && <th className="py-2.5 px-3 font-semibold">Source</th>}
+            <th className="py-2.5 px-3 font-semibold">Stage</th>
             <th className="py-2.5 px-3 font-semibold">Status</th>
             <th className="py-2.5 px-3 font-semibold">Score</th>
             <th className="py-2.5 px-3 font-semibold">Urgency</th>
@@ -23,6 +25,10 @@ export function OpportunityTable({ opps, dense = false }: { opps: OpportunityVie
         <tbody>
           {opps.map((o) => {
             const s = OPP_STATUS_STYLES[o.status];
+            // pipelineStyle(), not PIPELINE_STYLES[…] — rows that predate the
+            // 2026 vocabulary migration would make the direct lookup undefined
+            // and crash the whole list on `.label`.
+            const stg = pipelineStyle(o.pipeline_stage);
             const bucket = o.pursuit_bucket ? BUCKET_STYLES[o.pursuit_bucket] : null;
             const urgency = o.urgency ? URGENCY_STYLES[o.urgency] : null;
             const d = daysUntil(o.due_date);
@@ -57,10 +63,27 @@ export function OpportunityTable({ opps, dense = false }: { opps: OpportunityVie
                   </div>
                 </td>
                 {!dense && (
-                  <td className="py-3 px-3">
-                    <span className="chip">{o.source?.state ?? o.source?.name ?? "—"}</span>
+                  <td className="py-3 px-3 whitespace-nowrap">
+                    {o.department ? (
+                      <>
+                        <div className="text-[var(--color-ink-2)] font-medium">{o.department}</div>
+                        {o.sub_agency && (
+                          <div className="text-[0.7rem] text-[var(--color-faint)]">{o.sub_agency}</div>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-[0.72rem] text-[var(--color-faint)]">—</span>
+                    )}
                   </td>
                 )}
+                {!dense && (
+                  <td className="py-3 px-3">
+                    <span className="chip">{o.source?.state ?? o.state ?? o.source?.name ?? "—"}</span>
+                  </td>
+                )}
+                <td className="py-3 px-3">
+                  <Badge label={stg.label} bg={stg.bg} fg={stg.fg} dot={stg.dot} />
+                </td>
                 <td className="py-3 px-3">
                   <Badge label={s.label} bg={s.bg} fg={s.fg} dot={s.dot} />
                 </td>

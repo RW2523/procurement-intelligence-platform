@@ -20,7 +20,15 @@ import { markAllRead, markRead } from "@/lib/db/notifications";
 import { getSourceBySlug } from "@/lib/crawl/runner";
 import { runCrawlForSource } from "@/lib/crawl/pipeline";
 import { scanDeadlines } from "@/lib/notify/deadlines";
-import type { ConnectorType, ResponseMode, ResponseStatus } from "@/lib/types";
+import {
+  grantAccess,
+  revokeAccess,
+  setAccountActive,
+  countActiveAdmins,
+  findAccount,
+  findLogin,
+} from "@/lib/db/access";
+import { USER_ROLES, type ConnectorType, type ResponseMode, type ResponseStatus, type UserRole } from "@/lib/types";
 
 // Authorization model (see lib/auth/guard.ts):
 //   viewer   — read only (may only manage their own notifications)
@@ -130,6 +138,106 @@ export async function updateSettingAction(key: string, value: unknown) {
   await updateSetting(key, value);
   revalidatePath("/admin");
   revalidatePath("/", "layout");
+}
+
+// ── Procurement access / roles (admin) ───────────────────────────────────────
+// These are PRIVILEGE changes, so they get three things the rest of this file
+// does not need:
+//   1. requireRole("admin") — as always, but here it is the whole point.
+//   2. An audit row per change (public.user_access_log), written inside
+//      lib/db/access.ts so the script and the UI produce identical history.
+//   3. Lockout guards. A Server Action is only reachable by POST (Next 16 —
+//      docs/01-app/01-getting-started/07-mutating-data.md: "actions use the POST
+//      method, and only this HTTP method can invoke them"), and it is reachable
+//      by direct POST, not just through our UI — so every rule below must live
+//      here on the server, never in the component that renders the buttons.
+export type AccessResult = { ok: true; message: string } | { ok: false; message: string };
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export async function grantAccessAction(input: {
+  email: string;
+  role: UserRole;
+  name?: string;
+  reason?: string;
+}): Promise<AccessResult> {
+  const me = await requireRole("admin");
+  const email = input.email.trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) return { ok: false, message: "That doesn't look like an email address." };
+  // The role arrives from a POST body an attacker controls, not from our <select>.
+  if (!USER_ROLES.includes(input.role)) return { ok: false, message: `Unknown role "${input.role}".` };
+
+  // Demoting yourself out of admin is the classic one-click lockout when you are
+  // the only admin. Refuse rather than "confirm?" — there is no undo from the UI.
+  if (email === me.email.toLowerCase() && input.role !== "admin") {
+    return { ok: false, message: "You can't lower your own role. Ask another admin to do it." };
+  }
+
+  const login = await findLogin(email);
+  const result = await grantAccess({
+    email,
+    role: input.role,
+    name: input.name,
+    actor: me.email,
+    reason: input.reason ?? null,
+  });
+  revalidatePath("/admin/access");
+  revalidatePath("/admin");
+  revalidatePath("/", "layout");
+
+  const noun = result.effect === "created" ? "Granted" : result.effect === "unchanged" ? "Already" : "Updated";
+  const warn = login ? "" : " — note: no AJACE login exists for that address yet, so they can't sign in until the timesheet account is created.";
+  return { ok: true, message: `${noun} ${email} the ${input.role} role.${warn}` };
+}
+
+export async function revokeAccessAction(input: { email: string; reason?: string }): Promise<AccessResult> {
+  const me = await requireRole("admin");
+  const email = input.email.trim().toLowerCase();
+  if (email === me.email.toLowerCase()) {
+    return { ok: false, message: "You can't revoke your own access." };
+  }
+  const target = await findAccount(email);
+  if (!target) return { ok: false, message: `${email} has no procurement account.` };
+  if (target.role === "admin" && target.is_active && (await countActiveAdmins()) <= 1) {
+    return { ok: false, message: "That's the last active admin — promote someone else first." };
+  }
+  await revokeAccess({ email, actor: me.email, reason: input.reason ?? null });
+  revalidatePath("/admin/access");
+  revalidatePath("/admin");
+  revalidatePath("/", "layout");
+  return { ok: true, message: `Removed procurement access for ${email}. Their AJACE login still works.` };
+}
+
+export async function setAccessActiveAction(input: {
+  email: string;
+  active: boolean;
+  reason?: string;
+}): Promise<AccessResult> {
+  const me = await requireRole("admin");
+  const email = input.email.trim().toLowerCase();
+  if (email === me.email.toLowerCase() && !input.active) {
+    return { ok: false, message: "You can't deactivate your own account." };
+  }
+  const target = await findAccount(email);
+  if (!target) return { ok: false, message: `${email} has no procurement account.` };
+  if (!input.active && target.role === "admin" && target.is_active && (await countActiveAdmins()) <= 1) {
+    return { ok: false, message: "That's the last active admin — promote someone else first." };
+  }
+  const { changed } = await setAccountActive({
+    email,
+    active: input.active,
+    actor: me.email,
+    reason: input.reason ?? null,
+  });
+  revalidatePath("/admin/access");
+  revalidatePath("/admin");
+  revalidatePath("/", "layout");
+  return {
+    ok: true,
+    message: changed
+      ? `${input.active ? "Reactivated" : "Deactivated"} ${email}.`
+      : `${email} was already ${input.active ? "active" : "inactive"}.`,
+  };
 }
 
 // ── Crawl (admin — resource-intensive / operational) ─────────────────────────

@@ -42,9 +42,16 @@ export async function getSessionEmail(): Promise<string | null> {
  * account has no procurement `users` row. It deliberately does NOT fall back to a seeded
  * admin — a cross-app SSO user without a procurement account must be treated as
  * unauthorized, not silently elevated (authorization is enforced in lib/auth/guard.ts).
+ *
+ * An account with is_active = false is treated as NO account. Without this the
+ * column was decorative: "deactivate" wrote a boolean nobody read, so a suspended
+ * user kept their full role. Deactivating must revoke on the next request, the
+ * same way the timesheet's currentUser() drops ts_profiles.active = false.
  */
 export async function getCurrentUser(): Promise<User | null> {
   const email = await getSessionEmail();
   if (!email) return null;
-  return await getUserByEmail(email);
+  const user = await getUserByEmail(email);
+  if (!user || !user.is_active) return null;
+  return user;
 }

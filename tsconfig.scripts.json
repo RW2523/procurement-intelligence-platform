@@ -1,0 +1,18 @@
+// Typechecks scripts/, which the root tsconfig.json deliberately excludes
+// (so neither `tsc --noEmit` nor `next build` ever sees the importer or the
+// test scripts). Run it with `npm run typecheck:scripts`.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    // scripts/*.mts are executed by tsx, which resolves explicit ".ts"
+    // specifiers; this lets tsc accept the same specifiers. Requires noEmit.
+    "allowImportingTsExtensions": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node"]
+  },
+  "include": ["next-env.d.ts", "scripts/**/*.mts", "src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", ".next"]
+}

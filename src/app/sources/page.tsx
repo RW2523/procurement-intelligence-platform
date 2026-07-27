@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus, ExternalLink, Clock, CheckCircle2, AlertTriangle, Activity } from "lucide-react";
 import { dbConfigured } from "@/lib/supabase/server";
+import { pageGate } from "@/lib/auth/page-gate";
 import { listSourceHealth, getAllCrawlRuns } from "@/lib/db/sources";
 import { Card, CardHeader, PageHeader, Badge } from "@/components/ui";
 import { RunCrawlButton } from "@/components/RunCrawlButton";
@@ -20,6 +21,8 @@ export default async function SourcesPage() {
       </>
     );
   }
+  const { deny } = await pageGate();
+  if (deny) return deny;
   const [sources, runs] = await Promise.all([listSourceHealth(), getAllCrawlRuns(20)]);
 
   return (

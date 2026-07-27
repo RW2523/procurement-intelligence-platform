@@ -162,7 +162,7 @@ export function DocumentsPanel({
                   </button>
                 )}
                 {a.downloaded_at && a.parse_status !== "failed" && a.parse_status !== "too_large" && (
-                  <a className="btn btn-ghost btn-sm" href={`/api/attachments/${a.id}/file?download=1`}>
+                  <a className="btn btn-ghost btn-sm" href={api(`/api/attachments/${a.id}/file?download=1`)}>
                     <Download size={13} />
                   </a>
                 )}
@@ -206,7 +206,7 @@ export function DocumentsPanel({
           {(selectedDoc.content_type ?? "").startsWith("image/") ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={`/api/attachments/${selectedDoc.id}/file`}
+              src={api(`/api/attachments/${selectedDoc.id}/file`)}
               alt={selectedDoc.filename}
               className="max-w-full rounded-lg border border-[var(--color-border)]"
             />
@@ -220,7 +220,7 @@ export function DocumentsPanel({
             </pre>
           ) : (
             <iframe
-              src={`/api/attachments/${selectedDoc.id}/file`}
+              src={api(`/api/attachments/${selectedDoc.id}/file`)}
               title={selectedDoc.filename}
               className="w-full rounded-lg border border-[var(--color-border)] bg-white"
               style={{ height: 620 }}

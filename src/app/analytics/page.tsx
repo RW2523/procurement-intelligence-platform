@@ -1,5 +1,6 @@
 import { Trophy, DollarSign, Gauge, Activity, Target } from "lucide-react";
 import { dbConfigured } from "@/lib/supabase/server";
+import { pageGate } from "@/lib/auth/page-gate";
 import { getAnalytics } from "@/lib/db/analytics";
 import { getDashboardStats } from "@/lib/db/dashboard";
 import { Card, CardHeader, PageHeader, Stat } from "@/components/ui";
@@ -18,6 +19,8 @@ export default async function AnalyticsPage() {
       </>
     );
   }
+  const { deny } = await pageGate();
+  if (deny) return deny;
   const [a, stats] = await Promise.all([getAnalytics(), getDashboardStats()]);
 
   return (
@@ -27,7 +30,7 @@ export default async function AnalyticsPage() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         <Stat label="Pipeline value" value={fmtCurrency(stats.pipelineValue)} icon={<DollarSign size={15} />} hint="Open est. value" />
         <Stat label="Win rate" value={a.winRate == null ? "—" : `${a.winRate}%`} icon={<Trophy size={15} />} accent="var(--color-mint-100)" hint={`${a.won}W · ${a.lost}L`} />
-        <Stat label="Submitted" value={a.submitted} icon={<Activity size={15} />} accent="var(--color-amber-100)" hint="Responses sent" />
+        <Stat label="Submitted" value={a.submitted} icon={<Activity size={15} />} accent="var(--color-amber-100)" hint="Awaiting decision" />
         <Stat label="Avg relevance" value={a.avgRelevance == null ? "—" : pct(a.avgRelevance)} icon={<Target size={15} />} accent="var(--color-brand-50)" hint="Across all opps" />
         <Stat label="Crawl success" value={a.crawlSuccessRate == null ? "—" : `${a.crawlSuccessRate}%`} icon={<Gauge size={15} />} accent="var(--color-violet-100)" hint={`${a.totalCrawls} runs`} />
       </div>

@@ -66,7 +66,13 @@ const JSONB: Record<string, Set<string>> = {
   app_settings:               new Set(["value"]),
   targeting_profile_versions: new Set(["profile"]),
 };
-// text[] — bind raw: company_knowledge.tags, opportunities.set_asides
+// text[] — bind RAW, and DELIBERATELY ABSENT from the map above:
+//   company_knowledge.tags
+//   opportunities.set_asides
+//   opportunities.naics_codes                (added 2026-07, Pipeline_2026)
+//   forecast_opportunities.set_asides        (added 2026-07, Pipeline_2026)
+// The Pipeline_2026 change added NO jsonb column, so the JSONB map is unchanged.
+// If you ever add one (a structured capture log, a POC object), it goes above.
 
 const encode = (table: string, col: string, v: unknown) =>
   JSONB[table]?.has(col) && v !== null && v !== undefined ? JSON.stringify(v) : v;

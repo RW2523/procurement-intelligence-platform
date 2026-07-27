@@ -122,12 +122,45 @@ export async function generateResponseDraft(
     .single();
   if (error || !inserted) throw new Error(`Failed to save response: ${error?.message}`);
 
-  // Move the opportunity into the Drafting stage if it was earlier in the pipeline.
-  await sb
+  // Generating a draft means we are actively pursuing, so advance the row —
+  // but only FORWARDS, from the stages that sit before PURSUING in
+  // PIPELINE_STAGE_ORDER (IDENTIFIED, QUALIFYING). Anything at or past PURSUING
+  // is left alone.
+  //
+  // This used to write "DRAFTING" guarded on ["BACKLOG","REVIEWING"], which are
+  // all retired values that the pipeline_stage CHECK constraint now rejects.
+  // Note REVIEWING is deliberately NOT in the guard any more: it was earlier
+  // than DRAFTING in the old vocabulary, but in the new ordering it sits AFTER
+  // PURSUING, so advancing from it would silently move the row backwards.
+  //
+  // The query builder is untyped, so these strings are invisible to tsc — they
+  // must be kept in sync with PIPELINE_STAGE_ORDER in src/lib/types.ts by hand.
+  //
+  // The query builder RETURNS errors instead of throwing (see the comment in
+  // src/lib/db/query.ts, "Mirror Supabase: errors are RETURNED, not thrown"), so
+  // this result MUST be destructured — an un-destructured await swallows a failed
+  // transition and leaves the board showing a stage that contradicts the drafts
+  // attached to the row. Matching zero rows is NOT an error: it is the normal
+  // outcome when the opportunity already sits at or past PURSUING.
+  const { error: stageError } = await sb
     .from("opportunities")
-    .update({ pipeline_stage: "DRAFTING" })
+    .update({ pipeline_stage: "PURSUING" })
     .eq("id", opportunityId)
-    .in("pipeline_stage", ["BACKLOG", "REVIEWING"]);
+    .in("pipeline_stage", ["IDENTIFIED", "QUALIFYING"]);
+  if (stageError) {
+    console.error(
+      `[generate] pipeline_stage advance to PURSUING failed for opportunity ${opportunityId} ` +
+        `(draft ${(inserted as { id?: string }).id} was saved): ${stageError.message}`,
+    );
+    // Throw rather than return: every caller treats a returned draft as
+    // "generated and advanced" and reports success to the user, so returning
+    // here would report a move that never happened. The draft row is already
+    // committed and is named in both messages, so the failure is recoverable —
+    // the user can move the stage by hand instead of re-running generation.
+    throw new Error(
+      `Draft saved, but advancing the opportunity to PURSUING failed: ${stageError.message}`,
+    );
+  }
 
   return inserted as ResponseDraft;
 }
@@ -154,7 +187,10 @@ export async function reviseResponse(
     .from("response_revisions")
     .select("*", { count: "exact", head: true })
     .eq("response_id", responseId);
-  await sb.from("response_revisions").insert({
+  // Same builder contract as above: errors come back in the result. A lost
+  // revision row costs the audit trail but not the revision itself, so log and
+  // continue rather than abort a successful LLM call.
+  const { error: histError } = await sb.from("response_revisions").insert({
     response_id: responseId,
     revision_no: (count ?? 0) + 1,
     instruction,
@@ -163,12 +199,20 @@ export async function reviseResponse(
     model_used: result.model,
     revised_by: userId ?? null,
   });
+  if (histError) {
+    console.error(`[generate] revision history insert failed for response ${responseId}: ${histError.message}`);
+  }
 
-  const { data: updated } = await sb
+  const { data: updated, error: updateError } = await sb
     .from("responses")
     .update({ content: result.content, model_used: result.model, updated_at: new Date().toISOString() })
     .eq("id", responseId)
     .select("*")
     .single();
+  // Without this check a failed write returns `null as ResponseDraft` and the
+  // caller renders it as a successful revision.
+  if (updateError || !updated) {
+    throw new Error(`Failed to save revision: ${updateError?.message ?? "no row updated"}`);
+  }
   return updated as ResponseDraft;
 }

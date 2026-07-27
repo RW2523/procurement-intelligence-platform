@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { pageGate } from "@/lib/auth/page-gate";
 import { PageHeader } from "@/components/ui";
 import { UploadBidForm } from "@/components/bids/UploadBidForm";
 
-export default function NewBidPage() {
+export default async function NewBidPage() {
+  const { deny } = await pageGate();
+  if (deny) return deny;
   return (
     <>
       <Link

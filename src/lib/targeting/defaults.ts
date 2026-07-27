@@ -214,12 +214,25 @@ export const DEFAULT_TARGETING_PROFILE: TargetingProfile = {
   ],
 
   // ── Metadata: priority agencies (§7) ────────────────────────────────────────
+  //
+  // The five the user prioritized are DOT, DOI, DOE, VA and HHS. All five are
+  // present below (DOI was added 2026-07 — it was the one missing, despite
+  // appearing repeatedly in the pipeline sheet, so Interior work scored zero
+  // agency points). Their canonical codes and the alias→code matcher live in
+  // src/lib/departments.ts, which is what populates opportunities.department.
+  //
+  // This list is NOT a restriction on what may be crawled: every other agency
+  // still scores on capability, vehicle and set-aside like always. It only
+  // decides who earns the federalPoints bonus.
   agencies: {
     federalPoints: 6, // §9 "Federal Agency = 6"
     statePoints: 5, // §9 "State Government = 5"
     federal: [
       { name: "GSA", aliases: ["General Services Administration"] },
-      { name: "Department of Transportation", aliases: ["DOT"] },
+      // "Transportation, Department of" is SAM.gov's inverted fullParentPathName
+      // form (see src/lib/connectors/sam.ts) — without it every federal SAM row
+      // whose sub-agency isn't FAA/FMCSA/NHTSA missed the DOT bonus.
+      { name: "Department of Transportation", aliases: ["DOT", "Transportation, Department of"] },
       { name: "FAA", aliases: ["Federal Aviation Administration"] },
       { name: "FMCSA", aliases: ["Federal Motor Carrier Safety Administration"] },
       { name: "HUD", aliases: ["Housing and Urban Development"] },
@@ -236,7 +249,22 @@ export const DEFAULT_TARGETING_PROFILE: TargetingProfile = {
       { name: "USDA", aliases: ["Department of Agriculture"] },
       { name: "VA", aliases: ["Veterans Affairs", "Department of Veterans Affairs"] },
       { name: "DoD", aliases: ["Department of Defense", "Defense Department"], itOnly: true }, // §7 "DoD (IT only)"
-      { name: "DOE", aliases: ["Department of Energy"] },
+      { name: "DOE", aliases: ["Department of Energy", "Energy, Department of", "NNSA", "National Nuclear Security Administration"] },
+      // PRIORITY DEPARTMENT — added 2026-07. Interior appears throughout the
+      // pipeline sheet ("The U.S. Department of the Interior", "ibc.doi.gov")
+      // and scored nothing before this entry existed.
+      {
+        name: "Department of the Interior",
+        aliases: [
+          "DOI", "Department of Interior", "Interior, Department of the",
+          "Bureau of Land Management", "BLM",
+          "Bureau of Safety and Environmental Enforcement", "BSEE",
+          "Bureau of Ocean Energy Management", "BOEM",
+          "Bureau of Indian Affairs", "Bureau of Reclamation",
+          "National Park Service", "Geological Survey", "USGS",
+          "Fish and Wildlife Service", "Interior Business Center",
+        ],
+      },
       { name: "NHTSA", aliases: ["National Highway Traffic Safety Administration"] },
       { name: "FDIC", aliases: ["Federal Deposit Insurance Corporation"] },
     ],

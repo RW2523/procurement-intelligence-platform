@@ -28,16 +28,72 @@ export const OPP_STATUS_STYLES: Record<OppStatus, Style> = {
   CANCELLED: { label: "Cancelled", bg: "#eef0f4", fg: "#5b6170", dot: "#9aa1ad" },
 };
 
+/**
+ * The 11 capture & proposal phases. `Record<PipelineStage, Style>` makes this
+ * the compile-time exhaustiveness net for the vocabulary: `npm run typecheck`
+ * fails if a stage has no style, and every lookup in the app is unguarded
+ * (`PIPELINE_STYLES[opp.pipeline_stage].label`), so a missing entry would be a
+ * runtime TypeError on the board and the detail page.
+ *
+ * Colour story — the 11 stages need 11 distinguishable dots, which is more hues
+ * than the token palette carries, so five literals join the six tokens:
+ *   grey → sky → indigo (early, warming up) · warm grey for the NO_BID exit
+ *   violet → teal → amber → orange → fuchsia (in flight, escalating)
+ *   mint / rose for the two terminal outcomes.
+ * NO_BID gets a muted rose-grey, not the plain grey of IDENTIFIED: it is a
+ * deliberate decision, not an untouched row, and must not read as "new".
+ */
 export const PIPELINE_STYLES: Record<PipelineStage, Style> = {
-  BACKLOG: { label: "Backlog", bg: "#eef0f4", fg: "#5b6170", dot: "#9aa1ad" },
-  REVIEWING: { label: "Reviewing", bg: "var(--color-sky-100)", fg: "var(--color-sky-700)", dot: "var(--color-sky-500)" },
-  DRAFTING: { label: "Drafting", bg: "var(--color-violet-100)", fg: "#6d28d9", dot: "var(--color-violet-500)" },
-  APPROVED: { label: "Approved", bg: "var(--color-brand-50)", fg: "var(--color-brand-700)", dot: "var(--color-brand-500)" },
+  IDENTIFIED: { label: "Identified", bg: "#eef0f4", fg: "#5b6170", dot: "#9aa1ad" },
+  QUALIFYING: { label: "Qualifying", bg: "var(--color-sky-100)", fg: "var(--color-sky-700)", dot: "var(--color-sky-500)" },
+  PURSUING: { label: "Pursuing", bg: "var(--color-brand-50)", fg: "var(--color-brand-700)", dot: "var(--color-brand-500)" },
+  NO_BID: { label: "No Bid", bg: "#f4eef0", fg: "#7d5b64", dot: "#b08794" },
+  REVIEWING: { label: "Reviewing", bg: "var(--color-violet-100)", fg: "#6d28d9", dot: "var(--color-violet-500)" },
+  APPROVED: { label: "Approved", bg: "#ccfbf1", fg: "#0f766e", dot: "#14b8a6" },
   SUBMITTED: { label: "Submitted", bg: "var(--color-amber-100)", fg: "var(--color-amber-700)", dot: "var(--color-amber-500)" },
+  ORALS: { label: "Orals", bg: "#ffedd5", fg: "#c2410c", dot: "#f97316" },
+  BAFO: { label: "BAFO", bg: "#fae8ff", fg: "#a21caf", dot: "#d946ef" },
   WON: { label: "Won", bg: "var(--color-mint-100)", fg: "var(--color-mint-700)", dot: "var(--color-mint-500)" },
   LOST: { label: "Lost", bg: "var(--color-rose-100)", fg: "var(--color-rose-700)", dot: "var(--color-rose-500)" },
-  DECLINED: { label: "Declined", bg: "#eef0f4", fg: "#5b6170", dot: "#9aa1ad" },
 };
+
+/**
+ * Retired stage values → their replacement. Rows migrated by
+ * deploy/db/migrations/001-pipeline-2026.sql, but `opportunity_status_log`
+ * keeps the historical strings in old_value/new_value forever, so the audit
+ * trail needs this to render them. Also a safety net for any row that somehow
+ * predates the migration, via `pipelineLabel()` below.
+ */
+const RETIRED_STAGES: Record<string, PipelineStage> = {
+  BACKLOG: "IDENTIFIED",
+  DRAFTING: "PURSUING",
+  DECLINED: "NO_BID",
+};
+
+/**
+ * Human label for ANY stage string, including retired ones and unknown values.
+ * Prefer this over a bare `PIPELINE_STYLES[x].label` wherever the input is a
+ * free-text column (notably opportunity_status_log.old_value/new_value), which
+ * is not constrained to the current vocabulary.
+ */
+export function pipelineLabel(stage: string | null | undefined): string {
+  if (!stage) return "—";
+  const mapped = RETIRED_STAGES[stage] ?? stage;
+  return PIPELINE_STYLES[mapped as PipelineStage]?.label ?? stage;
+}
+
+/** Style for ANY stage string, falling back to neutral rather than throwing. */
+export function pipelineStyle(stage: string | null | undefined): Style {
+  const mapped = stage ? (RETIRED_STAGES[stage] ?? stage) : "";
+  return (
+    PIPELINE_STYLES[mapped as PipelineStage] ?? {
+      label: stage || "Unknown",
+      bg: "#eef0f4",
+      fg: "#5b6170",
+      dot: "#9aa1ad",
+    }
+  );
+}
 
 export const RESPONSE_STATUS_STYLES: Record<ResponseStatus, Style> = {
   DRAFT: { label: "Draft", bg: "#eef0f4", fg: "#5b6170" },

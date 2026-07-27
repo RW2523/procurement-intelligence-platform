@@ -4,6 +4,7 @@ import { getCompanySettings } from "@/lib/db/settings";
 import { classifyRelevanceLLM, buildProfileFromTargeting } from "@/lib/ai/relevance";
 import { getTargetingProfile } from "@/lib/targeting/profile";
 import { scoreOpportunity, type EngineResult } from "@/lib/targeting/engine";
+import { departmentForOpportunity } from "@/lib/departments";
 import { contentHash, fallbackExternalId } from "./hash";
 import { fetchOpportunityDocuments } from "./attachments";
 import { fmtDate } from "@/lib/utils";
@@ -104,9 +105,17 @@ export async function runCrawlForSource(source: Source, opts: CrawlOptions = {})
             .slice(0, 4)
             .map((b) => `${b.criterion} +${b.points}`)
             .join(" · ") || "No targeting criteria matched";
+      // `fields` is spread into BOTH the insert and the AMENDED update, so every
+      // key here is overwritten on each re-crawl. `department` belongs in that
+      // set: it is DERIVED from `agency` by a pure function, so re-deriving it
+      // when the portal changes the agency is the correct behaviour. The
+      // hand-entered Pipeline_2026 columns (capture_notes, outcome,
+      // lessons_learned, is_shared…) are the opposite and must stay OUT — adding
+      // them here would silently wipe the user's own typing on every crawl.
       const fields = {
         title: o.title,
         agency: o.agency ?? null,
+        department: departmentForOpportunity(o.agency, o.title),
         category: o.category ?? null,
         naics_code: o.naicsCode ?? null,
         description: o.description ?? null,

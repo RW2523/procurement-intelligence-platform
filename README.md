@@ -117,7 +117,8 @@ npm run dev                       # http://localhost:3000
 - **Opportunity detail** — description, attachments, version history, full audit trail, and the **Response Workspace**.
 - **Response Workspace** — Mode 1 (style-matched, RAG) + Mode 2 (LLM-original) side by side, edit, the
   revision loop ("tell it what to change"), revision history, approve/submit, and **Word export**.
-- **Pipeline Board** — Kanban (Backlog → … → Won/Lost); drag or dropdown; every move logged.
+- **Pipeline Board** — Kanban over the 11 capture & proposal stages (Identified → Qualifying → Pursuing →
+  No Bid → Reviewing → Approved → Submitted → Orals → BAFO → Won/Lost); drag or dropdown; every move logged.
 - **Sources** — per-portal health, schedules, *Run now*, *Add portal* (registers + schedules new portals).
 - **Knowledge Library** — upload past proposals → chunked + embedded for RAG.
 - **Analytics** — pipeline by stage, AI mode usage, coverage by state, win rate, crawl health.

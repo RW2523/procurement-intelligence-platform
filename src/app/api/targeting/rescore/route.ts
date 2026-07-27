@@ -3,6 +3,7 @@ import { getServiceClient, dbConfigured } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/guard";
 import { getTargetingProfile } from "@/lib/targeting/profile";
 import { scoreOpportunity } from "@/lib/targeting/engine";
+import { departmentForOpportunity } from "@/lib/departments";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -39,13 +40,15 @@ export async function POST(req: NextRequest) {
     bid_recommendation: string | null;
     relevance_score: number | null;
     relevance_method: string | null;
+    /** The department already on the row. SELECTED ON PURPOSE — see the update below. */
+    department: string | null;
     source?: { state?: string | null } | null;
   }
   const { data } = await sb
     .from("opportunities")
     .select(
       "id, title, description, category, agency, naics_code, due_date, estimated_value, " +
-        "bid_recommendation, relevance_score, relevance_method, source:sources(state)",
+        "bid_recommendation, relevance_score, relevance_method, department, source:sources(state)",
     )
     .is("pursuit_bucket", null)
     .order("first_seen_at", { ascending: false })
@@ -103,6 +106,28 @@ export async function POST(req: NextRequest) {
     await sb
       .from("opportunities")
       .update({
+        // Derived from `agency` by a pure matcher, so rescoring is also the
+        // department backfill. NOTE: this batch only sees rows with a null
+        // pursuit_bucket, so backfilling the whole corpus means POSTing
+        // {reset:true} first (which clears pursuit_bucket) and then looping
+        // until `done` — exactly the flow Admin already uses after a profile edit.
+        //
+        // ?? r.department — A RESCORE MUST NEVER DESTROY A DEPARTMENT. It used to
+        // write the matcher's answer unconditionally, and that DELETED the value
+        // on 26 of the operator's 71 imported rows in a single pass: this matcher
+        // models only the five PRIORITY codes and answers null for everything
+        // else, while the column deliberately has no CHECK constraint and
+        // legitimately holds DOJ, GSA, DOD, NSF, ED… (see the `department`
+        // comment in deploy/db/schema.sql). Re-importing did not heal it — the
+        // importer is content-hash idempotent, so it rewrote nothing.
+        //
+        // Recompute, then fall back. A non-null match always wins, so a genuinely
+        // changed `agency` still re-derives the department (the backfill this
+        // route is meant to perform). A null match means only "I have nothing to
+        // say about this row" — never "this row has no department" — so whatever
+        // is already stored, put there by the importer or by a human who knows
+        // something the five-code matcher does not, is left alone.
+        department: departmentForOpportunity(r.agency, r.title) ?? r.department,
         pursuit_score: engine.pursuitScore,
         pursuit_bucket: bucket,
         urgency: engine.urgency,
