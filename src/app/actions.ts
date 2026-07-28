@@ -63,6 +63,22 @@ export async function setStageAction(oppId: string, value: string, reason?: stri
   revalidatePath("/board");
   revalidatePath("/opportunities");
 }
+/**
+ * Fill in details the spreadsheet did not carry. Writer-gated like every other
+ * mutation here; the column allow-list lives in lib/bids/completeness.ts so the
+ * form, the "what is missing" badge and this write can never disagree.
+ */
+export async function updateBidDetailsAction(oppId: string, patch: Record<string, unknown>) {
+  await requireRole("writer");
+  const { updateBidDetails } = await import("@/lib/db/opportunities");
+  const res = await updateBidDetails(oppId, patch);
+  revalidatePath(`/opportunities/${oppId}`);
+  revalidatePath("/opportunities");
+  revalidatePath("/my-bids");
+  revalidatePath("/board");
+  return res;
+}
+
 export async function assignAction(oppId: string, userId: string | null) {
   await requireRole("writer");
   await assignOpportunity(oppId, userId || null);

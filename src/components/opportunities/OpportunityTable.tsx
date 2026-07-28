@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Paperclip, FileText, Award } from "lucide-react";
+import { Paperclip, FileText, Award , AlertCircle } from "lucide-react";
+import { countMissing } from "@/lib/bids/completeness";
 import type { OpportunityView } from "@/lib/types";
 import { OPP_STATUS_STYLES, BID_REC_STYLES, BUCKET_STYLES, URGENCY_STYLES, pipelineStyle } from "@/lib/status";
 import { Badge } from "@/components/ui";
@@ -60,6 +61,31 @@ export function OpportunityTable({ opps, dense = false }: { opps: OpportunityVie
                         <FileText size={11} /> {o.response_count}
                       </span>
                     )}
+                    {(() => {
+                      // Same definition the detail page uses, so "2 needed" here
+                      // and "2 details missing" there can never disagree.
+                      const { blocking, total } =
+                        countMissing(o as unknown as Record<string, unknown>);
+                      // BLOCKING ONLY. Measured against the operator's real
+                      // workbook, 71 of 71 rows are missing at least one
+                      // "helpful" field (estimated value is blank on 70, period
+                      // of performance on 69) simply because the sheet does not
+                      // track them. A badge that appears on every row carries no
+                      // information — this one has to mean "look at me".
+                      if (!blocking) return null;
+                      return (
+                        <span
+                          className="inline-flex items-center gap-0.5"
+                          style={{ color: blocking
+                            ? "var(--color-amber-600,#a16207)"
+                            : "var(--color-faint)" }}
+                          title={`${blocking} detail${blocking === 1 ? "" : "s"} needed before this can be worked properly` +
+                                 (total > blocking ? ` (${total - blocking} more optional)` : "")}
+                        >
+                          <AlertCircle size={11} /> {blocking}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </td>
                 {!dense && (

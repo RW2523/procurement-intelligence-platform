@@ -307,3 +307,46 @@ export async function getBoard(): Promise<Record<PipelineStage, OpportunityView[
   }
   return board;
 }
+
+/**
+ * Write operator-supplied detail onto a bid.
+ *
+ * Used by the "missing details" editor. Only the columns in EDITABLE_KEYS are
+ * accepted and each is bound as a parameter — the patch arrives from a form, so
+ * a stray key must never become a column name. Empty strings are stored as NULL
+ * so a cleared field reads as missing again rather than as an empty answer.
+ */
+export async function updateBidDetails(
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<{ updated: string[] }> {
+  const { EDITABLE_KEYS } = await import("@/lib/bids/completeness");
+  const allowed = new Set<string>(EDITABLE_KEYS as readonly string[]);
+
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  for (const [k, raw] of Object.entries(patch)) {
+    if (!allowed.has(k)) continue;
+    let v = raw;
+    if (typeof v === "string" && v.trim() === "") v = null;
+    if (k === "estimated_value" && v !== null) {
+      const n = Number(String(v).replace(/[^0-9.]/g, ""));
+      v = Number.isFinite(n) ? n : null;
+    }
+    if (k === "set_asides" && typeof v === "string") {
+      v = v.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+    sets.push(k);
+    vals.push(v);
+  }
+  if (!sets.length) return { updated: [] };
+
+  const { sql } = await import("@/lib/db/pg");
+  await sql(
+    `update public.opportunities
+        set ${sets.map((c, i) => `"${c}" = $${i + 1}`).join(", ")}, updated_at = now()
+      where id = $${sets.length + 1}`,
+    [...vals, id],
+  );
+  return { updated: sets };
+}

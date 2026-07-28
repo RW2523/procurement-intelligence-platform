@@ -36,6 +36,7 @@ import { listUsers } from "@/lib/db/users";
 import { Card, CardHeader, Badge, RelevanceBar } from "@/components/ui";
 import { StatusControls } from "@/components/opportunities/StatusControls";
 import { ScoreBreakdown } from "@/components/opportunities/ScoreBreakdown";
+import { MissingDetails } from "@/components/opportunities/MissingDetails";
 import { DocumentsPanel } from "@/components/opportunities/DocumentsPanel";
 import { ResponseWorkspace, type ResponseWithRevisions } from "@/components/responses/ResponseWorkspace";
 import { SetupNotice } from "@/components/SetupNotice";
@@ -74,7 +75,7 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
   // opportunities/layout.tsx gates entry into this segment, but Next reuses a
   // mounted layout across navigations within it (docs 01-app/02-guides/authentication.md:1350),
   // so moving between two opportunities would otherwise skip the check.
-  const { deny } = await pageGate();
+  const { deny, user } = await pageGate();
   if (deny) return deny;
 
   const opp = await getOpportunity(id);
@@ -240,6 +241,10 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
             </Card>
           )}
 
+          <MissingDetails
+            bid={opp as unknown as Record<string, unknown>}
+            canEdit={user?.role === "writer" || user?.role === "approver" || user?.role === "admin"}
+          />
           <ScoreBreakdown opp={opp} />
 
           <Card>
